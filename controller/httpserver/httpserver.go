@@ -13,6 +13,10 @@ import (
 	"strings"
 )
 
+const (
+	MetaHeaderPrefix = "X-Radish-"
+)
+
 // HttpServer is a implementation of HttpServer interface
 type HttpServer struct {
 	http.Server
@@ -61,17 +65,20 @@ func (s *HttpServer) Shutdown() error {
 // receives message.Response, corresponding to sent Request
 // and transorms message.Response into HTTP response
 func (s *HttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	//TODO: if header isn't multipart, extract single value from body, if it is
+	//TODO: use code generation to generate routes for commands, with params count check, POST/GET check
+	//TODO: причесать
 	var (
 		request  *message.Request
 		response *message.Response
 	)
 	mr, err := r.MultipartReader()
 	if err == http.ErrNotMultipart {
-		// this is single-payload request
-		request, err = s.parseSinglePayload(r)
+		request, err = parseSinglePayload(r)
+	} else if err == nil {
+		request, err = parseMultiPayload(r, mr)
 	} else {
-		request, err = s.parseMultiPayload(r, mr)
+		http.Error(w, "Error during processing request: "+err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	if err != nil {
@@ -79,9 +86,8 @@ func (s *HttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//TODO: добавить маппинг статусов response на статусы HTTP
-
 	response = s.messageHandler.HandleMessage(request)
+	httpStatus := getResponseHttpStatus(response)
 
 	if len(response.MultiPayloads) > 0 {
 		body := &bytes.Buffer{}
@@ -98,23 +104,51 @@ func (s *HttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		w.Header().Set("Content-Type", writer.FormDataContentType())
+		w.WriteHeader(httpStatus)
 		io.Copy(w, body)
 	} else {
+		w.WriteHeader(httpStatus)
 		w.Write(response.Payload)
 	}
 
 }
 
-func (s *HttpServer) parseSinglePayload(r *http.Request) (req *message.Request, err error) {
+func getResponseHttpStatus(r *message.Response) int {
+	statusMap := map[message.Status]int{
+		message.StatusOk:       http.StatusOK,
+		message.StatusNotFound: http.StatusNotFound,
+		message.StatusError:    http.StatusInternalServerError,
+	}
+
+	if httpStatus, ok := statusMap[r.Status]; ok {
+		return httpStatus
+	} else {
+		return http.StatusInternalServerError
+	}
+}
+
+func parseMeta(r *http.Request) map[string]string {
+	meta := make(map[string]string)
+	for key, values := range r.Header {
+		if strings.HasPrefix(key, MetaHeaderPrefix) {
+			metaKey := strings.Replace(key, MetaHeaderPrefix, "", 1)
+			meta[metaKey] = values[0]
+		}
+	}
+
+	return meta
+}
+
+func parseSinglePayload(r *http.Request) (req *message.Request, err error) {
 	//TODO: add checks
 	urlparts := strings.Split(r.URL.Path, "/")
 	payload, err := ioutil.ReadAll(r.Body)
-	return message.NewRequest(urlparts[0], urlparts[1:], nil, payload, nil), err
+
+	return message.NewRequest(urlparts[1], urlparts[2:], parseMeta(r), payload, nil), err
 }
 
-func (s *HttpServer) parseMultiPayload(r *http.Request, mr *multipart.Reader) (req *message.Request, err error) {
+func parseMultiPayload(r *http.Request, mr *multipart.Reader) (req *message.Request, err error) {
 	//TODO: add checks
-	//TODO: fix parsing FormName() with \n in the middle
 	urlparts := strings.Split(r.URL.Path, "/")
 
 	multipayload := map[string][]byte{}
@@ -126,9 +160,8 @@ func (s *HttpServer) parseMultiPayload(r *http.Request, mr *multipart.Reader) (r
 			return nil, err
 		}
 
-		log.Debugf("Got payload: %s =  %s", p.FormName(), string(payload))
 		multipayload[p.FormName()] = payload
 	}
 
-	return message.NewRequest(urlparts[0], urlparts[1:], nil, nil, multipayload), err
+	return message.NewRequest(urlparts[1], urlparts[2:], parseMeta(r), nil, multipayload), err
 }

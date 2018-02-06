@@ -2,6 +2,12 @@
 
 
 [[projects]]
+  name = "github.com/go-test/deep"
+  packages = ["."]
+  revision = "6592d9cc0a499ad2d5f574fde80a2b5c5cc3b4f5"
+  version = "v1.0.1"
+
+[[projects]]
   name = "github.com/op/go-logging"
   packages = ["."]
   revision = "b2cb9fa56473e98db8caba80237377e83fe44db5"
@@ -10,6 +16,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "a8d30ff8d12eead3c1fcc16ae65582fd05a775c4aee8724ff543b1206bd3462c"
+  inputs-digest = "0597b74465a3c6e616bb6504ec4304181099ca398837f6099118d3906404dec3"
   solver-name = "gps-cdcl"
   solver-version = 1

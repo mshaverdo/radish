@@ -26,6 +26,7 @@ type Status int
 
 const (
 	StatusOk Status = iota
+	StatusError
 	StatusNotFound
 )
 
