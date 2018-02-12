@@ -1,7 +1,36 @@
 package core
 
-// Engine incapsulates concrete storage engine  -- Btree, hashmap, etc
+import (
+	"errors"
+	"github.com/ryanuber/go-glob"
+	"math"
+)
+
+//TODO: check performace! check Locks waiting!
+//TODO: if Engine.Lock() will be a bottleneck, try to use sharding by engines
+//TODO: обновление будет применяться для множества операци. Возможно, стоит реализовать его как ProcessUPdate(key, updater func(), updaterParams []string
+
+var (
+	// ErrNotFound returned by Core API methods when requested key not found
+	ErrNotFound      = errors.New("core: item not found")
+	ErrWrongType     = errors.New("core: operation against a key holding the wrong kind of value")
+	ErrInvalidParams = errors.New("core: Invalid command arguments")
+)
+
+// Engine encapsulates concrete concurrency-safe storage engine  -- Btree, hashmap, etc
 type Engine interface {
+	// Get returns reference to Item by key. If Item not exists, return nil
+	Get(key string) *Item
+
+	// AddOrReplace adds new or replaces existing Items in the engine
+	AddOrReplace(items map[string]*Item)
+
+	// Del removes Items from engine and returns count of actually removed values
+	// if key not found in the engine, just skip it
+	Del(keys []string) (count int)
+
+	// Keys returns all keys existing in the Engine
+	Keys() []string
 }
 
 // Core provides domain operations on the storage -- get, set, keys, hset, hdel, etc
@@ -10,6 +39,437 @@ type Core struct {
 }
 
 // NewCore constructs new core instance
-func NewCore() *Core {
-	return &Core{engine: NewHashEngine()}
+func NewCore(engine Engine) *Core {
+	return &Core{engine: engine}
+}
+
+// Keys returns all keys matching glob pattern
+func (c *Core) Keys(pattern string) (result []string) {
+	allKeys := c.engine.Keys()
+	if pattern == "*" {
+		return allKeys
+	}
+
+	// pre-allocate slice to avoid reallocation
+	filteredKeys := make([]string, 0, len(allKeys))
+	for _, key := range allKeys {
+		if glob.Glob(pattern, key) {
+			filteredKeys = append(filteredKeys, key)
+		}
+	}
+
+	return filteredKeys
+}
+
+// Get the value of key. If the key does not exist the special value nil is returned.
+// An error is returned if the value stored at key is not a string, because GET only handles string values.
+func (c *Core) Get(key string) (result []byte, err error) {
+	item := c.engine.Get(key)
+	if item == nil {
+		return nil, nil //ErrNotFound
+	}
+
+	item.RLock()
+	defer item.RUnlock()
+
+	if item.kind != Bytes {
+		return nil, ErrWrongType
+	}
+
+	bytes := item.Bytes()
+	result = make([]byte, len(bytes))
+	copy(result, bytes)
+
+	return result, nil
+}
+
+// Set key to hold the string value.
+// If key already holds a value, it is overwritten, regardless of its type.
+// Any previous time to live associated with the key is discarded on successful SET operation.
+func (c *Core) Set(key string, value []byte) {
+	if value == nil {
+		panic("Program Logic error: trying to to insert nil value into the core")
+	}
+	c.engine.AddOrReplace(map[string]*Item{key: NewItemBytes(value)})
+}
+
+// Del Removes the specified keys, ignoring not existing and returns count of actually removed values.
+// Due to the system isn't supports replications/slaves,
+// we don't need conflict resolution, so we could simplify deletion:
+// just remove link to Item from Engine, instead marking 'deleted' and then collect garbage in background, etc
+func (c *Core) Del(keys []string) (count int) {
+	return c.engine.Del(keys)
+}
+
+// DSet Sets field in the hash stored at key to value.
+// If key does not exist, a new key holding a hash is created.
+// If field already exists in the dict, it is overwritten.
+// returns 1 if f field is a new field in the hash and value was set.
+// returns 0 if field already exists in the hash and the value was updated.
+func (c *Core) DSet(key, field string, value []byte) (count int, err error) {
+	if value == nil {
+		panic("Program Logic error: trying to to insert nil value into the core")
+	}
+
+	item := c.engine.Get(key)
+	if item == nil {
+		item = NewItemDict(map[string][]byte{})
+		defer func() {
+			c.engine.AddOrReplace(map[string]*Item{key: item})
+		}()
+	}
+
+	item.Lock()
+	defer item.Unlock()
+
+	if item.kind != Dict {
+		return 0, ErrWrongType
+	}
+
+	dict := item.Dict()
+	count = 1
+	if _, ok := dict[field]; ok {
+		count = 0
+	}
+	dict[field] = value
+
+	return count, nil
+}
+
+// DGet Returns the value associated with field in the dict stored at key.
+func (c *Core) DGet(key, field string) (result []byte, err error) {
+	item := c.engine.Get(key)
+	if item == nil {
+		return nil, nil //ErrNotFound
+	}
+
+	item.RLock()
+	defer item.RUnlock()
+
+	if item.kind != Dict {
+		return nil, ErrWrongType
+	}
+
+	dict := item.Dict()
+	value, ok := dict[field]
+	if !ok {
+		return nil, nil //ErrNotFound
+	}
+
+	result = make([]byte, len(value))
+	copy(result, value)
+
+	return result, nil
+}
+
+// Returns all field names in the dict stored at key.
+func (c *Core) DKeys(key, pattern string) (result []string, err error) {
+	item := c.engine.Get(key)
+	if item == nil {
+		return nil, nil //ErrNotFound
+	}
+
+	item.RLock()
+	defer item.RUnlock()
+
+	if item.kind != Dict {
+		return nil, ErrWrongType
+	}
+
+	dict := item.Dict()
+
+	// pre-allocate slice to avoid reallocation
+	filteredKeys := make([]string, 0, len(dict))
+	for key, _ := range dict {
+		if glob.Glob(pattern, key) {
+			filteredKeys = append(filteredKeys, key)
+		}
+	}
+
+	return filteredKeys, nil
+}
+
+// DGetAll Returns all fields and values of the hash stored at key.
+// In the returned value, every field name is followed by its value,
+// so the length of the reply is twice the size of the hash.
+func (c *Core) DGetAll(key string) (result [][]byte, err error) {
+	item := c.engine.Get(key)
+	if item == nil {
+		return nil, nil //ErrNotFound
+	}
+
+	item.RLock()
+	defer item.RUnlock()
+
+	if item.kind != Dict {
+		return nil, ErrWrongType
+	}
+
+	dict := item.Dict()
+	result = make([][]byte, 0, 2*len(dict))
+	for k, v := range dict {
+		keyBytes := []byte(k)
+		value := make([]byte, len(v))
+		copy(value, v)
+		result = append(result, keyBytes, value)
+	}
+
+	return result, nil
+}
+
+// DDel Removes the specified fields from the hash stored at key.
+// Specified fields that do not exist within this hash are ignored.
+// If key does not exist, it is treated as an empty hash and this command returns 0.
+func (c *Core) DDel(key string, fields []string) (count int, err error) {
+	item := c.engine.Get(key)
+	if item == nil {
+		return 0, nil
+	}
+
+	item.Lock()
+	defer item.Unlock()
+
+	if item.kind != Dict {
+		return 0, ErrWrongType
+	}
+
+	dict := item.Dict()
+	for _, field := range fields {
+		if _, ok := dict[field]; ok {
+			count++
+			delete(dict, field)
+		}
+	}
+
+	return count, nil
+}
+
+// Returns the length of the list stored at key.
+// If key does not exist, it is interpreted as an empty list and 0 is returned.
+// An error is returned when the value stored at key is not a list.
+func (c *Core) LLen(key string) (count int, err error) {
+	item := c.engine.Get(key)
+	if item == nil {
+		return 0, nil //ErrNotFound
+	}
+
+	item.RLock()
+	defer item.RUnlock()
+
+	if item.kind != List {
+		return 0, ErrWrongType
+	}
+
+	return len(item.List()), nil
+}
+
+// LRange returns the specified elements of the list stored at key.
+// The offsets start and stop are zero-based indexes,  with 0 being the first element of the list (the HEAD of the list)
+// These offsets can also be negative numbers indicating offsets starting at the end of the list.
+// For example, -1 is the last element of the list, -2 the penultimate, and so on.
+func (c *Core) LRange(key string, start, stop int) (result [][]byte, err error) {
+	item := c.engine.Get(key)
+	if item == nil {
+		return nil, nil //ErrNotFound
+	}
+
+	item.RLock()
+	defer item.RUnlock()
+
+	if item.kind != List {
+		return nil, ErrWrongType
+	}
+
+	list := item.List()
+	lLen := len(list)
+
+	// just return on empty list to avoid further index checks
+	if lLen == 0 {
+		return [][]byte{}, nil
+	}
+
+	if start < 0 {
+		start += lLen
+	}
+	if stop < 0 {
+		stop += lLen
+	}
+
+	start = int(math.Max(float64(start), 0.0))
+	stop = int(math.Min(float64(stop), float64(lLen-1)))
+
+	// after normalizing, next check  also covers start > len(), stop < 0
+	if start > stop {
+		return [][]byte{}, nil
+	}
+
+	//IMPORTANT: by proto, HEAD of the list has index 0, but in the slice storage it is the LAST element of the slice
+	startIndex := lLen - 1 - stop
+	// don't do -1 due to in GO slicing stops BEFORE stop, and in radish proto range stops AT stop
+	stopIndex := lLen - start
+
+	slice := list[startIndex:stopIndex]
+	// just return on empty list to avoid further index checks
+	if len(slice) == 0 {
+		return [][]byte{}, nil
+	}
+
+	result = make([][]byte, len(slice))
+
+	// due to in radish HEAD of list has index 0, reverse actual items order in the slice
+	for i, v := range slice {
+		resultI := len(slice) - 1 - i
+		result[resultI] = make([]byte, len(v))
+		copy(result[resultI], v)
+	}
+
+	return result, nil
+}
+
+// LIndex Returns the element at index index in the list stored at key.
+// The index is zero-based, 0 points to HEAD of the list.
+// Negative indices can be used to designate elements starting at the tail of the list.
+// Here, -1 means the last element, -2 means the penultimate and so forth.
+// When the value at key is not a list, an error is returned.
+func (c *Core) LIndex(key string, index int) (result []byte, err error) {
+	item := c.engine.Get(key)
+	if item == nil {
+		return nil, nil //ErrNotFound
+	}
+
+	item.RLock()
+	defer item.RUnlock()
+
+	if item.kind != List {
+		return nil, ErrWrongType
+	}
+
+	list := item.List()
+	lLen := len(list)
+
+	if index < 0 {
+		index += lLen
+	}
+
+	// it also covers LLen == 0
+	if !(0 <= index && index <= lLen-1) {
+		return []byte{}, nil
+	}
+
+	//IMPORTANT: by proto, HEAD of the list has index 0, but in the slice storage it is the LAST element of the slice
+	sliceIndex := lLen - 1 - index
+
+	value := list[sliceIndex]
+
+	result = make([]byte, len(value))
+	copy(result, value)
+
+	return result, nil
+}
+
+// LSet Sets the list element at index to value.
+// The index is zero-based, 0 points to HEAD of the list.
+// Negative indices can be used to designate elements starting at the tail of the list.
+// Here, -1 means the last element, -2 means the penultimate and so forth.
+// An error is returned for out of range indexes.
+func (c *Core) LSet(key string, index int, value []byte) (err error) {
+	if value == nil {
+		panic("Program Logic error: trying to to insert nil value into the core")
+	}
+
+	item := c.engine.Get(key)
+	if item == nil {
+		// LSet replaces only existing element
+		return ErrNotFound
+	}
+
+	item.Lock()
+	defer item.Unlock()
+
+	if item.kind != List {
+		return ErrWrongType
+	}
+
+	list := item.List()
+	lLen := len(list)
+
+	if index < 0 {
+		index += lLen
+	}
+
+	// index out of range
+	if !(0 <= index && index <= lLen-1) {
+		return ErrInvalidParams
+	}
+
+	//IMPORTANT: by proto, HEAD of the list has index 0, but in the slice storage it is the LAST element of the slice
+	sliceIndex := lLen - 1 - index
+
+	list[sliceIndex] = value
+
+	return nil
+}
+
+// LPush Insert all the specified values at the head of the list stored at key.
+// If key does not exist, it is created as empty list before performing the push operations.
+// When key holds a value that is not a list, an error is returned.
+// Multiple Elements are inserted one after the other to the head of the list,
+// from the leftmost element to the rightmost element.
+// So for instance the command LPush("mylist",  []byte[a b c]) will result into a list containing [c, b, a]
+func (c *Core) LPush(key string, values [][]byte) (count int, err error) {
+	item := c.engine.Get(key)
+	if item == nil {
+		item = NewItemList([][]byte{})
+		defer func() {
+			c.engine.AddOrReplace(map[string]*Item{key: item})
+		}()
+	}
+
+	item.Lock()
+	defer item.Unlock()
+
+	if item.kind != List {
+		return 0, ErrWrongType
+	}
+
+	list := item.List()
+
+	for _, v := range values {
+		if v == nil {
+			panic("Program Logic error: trying to to insert nil value into the core")
+		}
+	}
+
+	list = append(list, values...)
+	item.SetList(list)
+
+	return len(list), nil
+}
+
+// LPop Removes and returns the first element of the list stored at key.
+func (c *Core) LPop(key string) (result []byte, err error) {
+	item := c.engine.Get(key)
+	if item == nil {
+		return nil, nil
+	}
+
+	item.Lock()
+	defer item.Unlock()
+
+	if item.kind != List {
+		return nil, ErrWrongType
+	}
+
+	list := item.List()
+
+	if len(list) == 0 {
+		return nil, nil
+	}
+
+	// don't copy result ,due to it will be removed from list
+	result = list[len(list)-1]
+	list = list[:len(list)-1]
+	item.SetList(list)
+
+	return result, nil
 }

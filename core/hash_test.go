@@ -128,12 +128,12 @@ func TestHashEngine_concurrency(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := 0; i < 1000; i++ {
 		wg.Add(1)
-		go worker(&wg, e, tests)
+		go hashEngineWorker(&wg, e, tests)
 	}
 
 	wg.Wait()
 
-	// Due to last operation of every worker is AddOrReplace() for last keyset
+	// Due to last operation of every hashEngineWorker is AddOrReplace() for last keyset
 	// after all workers done, only last keyset  should remain in the engine
 	got := e.Keys()
 	want := tests[len(tests)-1]
@@ -144,7 +144,7 @@ func TestHashEngine_concurrency(t *testing.T) {
 	}
 }
 
-func worker(wg *sync.WaitGroup, e *HashEngine, tests [][]string) {
+func hashEngineWorker(wg *sync.WaitGroup, e *HashEngine, tests [][]string) {
 	var items map[string]*Item
 	for _, test := range tests {
 		items = map[string]*Item{}
