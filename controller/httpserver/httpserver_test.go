@@ -15,14 +15,14 @@ import (
 
 type MockMessageHandler struct {
 	lastRequest           *message.Request
-	responseSinglePayload []byte
-	responseMultiPayloads map[string][]byte
+	responseSinglePayload string
+	responseMultiPayloads map[string]string
 }
 
 // HandleMessage processes Request and return Response
 func (m *MockMessageHandler) HandleMessage(request *message.Request) *message.Response {
-	m.responseSinglePayload = []byte("PAYLOAD Ф")
-	m.responseMultiPayloads = map[string][]byte{"1": []byte("Payload1 Ы"), "2": []byte("Payload2 Щ")}
+	m.responseSinglePayload = "PAYLOAD Ф"
+	m.responseMultiPayloads = map[string]string{"1": "Payload1 Ы", "2": "Payload2 Щ"}
 
 	m.lastRequest = request
 
@@ -33,9 +33,13 @@ func (m *MockMessageHandler) HandleMessage(request *message.Request) *message.Re
 	}
 
 	if len(request.MultiPayloads) > 0 {
-		return message.NewResponse(status, nil, m.responseMultiPayloads)
+		multiPayloads := map[string][]byte{}
+		for k, v := range m.responseMultiPayloads {
+			multiPayloads[k] = []byte(v)
+		}
+		return message.NewResponse(status, nil, multiPayloads)
 	} else {
-		return message.NewResponse(status, m.responseSinglePayload, nil)
+		return message.NewResponse(status, []byte(m.responseSinglePayload), nil)
 	}
 }
 
@@ -103,7 +107,7 @@ func TestHttpServer_ServeHTTP(t *testing.T) {
 			t.Errorf("Invalid status code: got %d, want %d", recorder.Code, test.wantStatus)
 		}
 
-		if diff := deep.Equal(recorder.Body.Bytes(), mockHandler.responseSinglePayload); diff != nil {
+		if diff := deep.Equal(recorder.Body.String(), mockHandler.responseSinglePayload); diff != nil {
 			t.Errorf("Invalid payload : %s", diff)
 		}
 	}
@@ -165,7 +169,7 @@ func newMockMultiRequest(uri string, params map[string]string, meta map[string]s
 	return req
 }
 
-func praseMultipartResponse(r *httptest.ResponseRecorder) (result map[string][]byte, err error) {
+func praseMultipartResponse(r *httptest.ResponseRecorder) (result map[string]string, err error) {
 	v := r.Header().Get("Content-Type")
 	if v == "" {
 		return nil, errors.New("Not a multipart")
@@ -181,7 +185,7 @@ func praseMultipartResponse(r *httptest.ResponseRecorder) (result map[string][]b
 
 	reader := multipart.NewReader(r.Body, boundary)
 
-	result = map[string][]byte{}
+	result = map[string]string{}
 	for p, err := reader.NextPart(); err == nil; p, err = reader.NextPart() {
 		payload, err := ioutil.ReadAll(p)
 
@@ -189,7 +193,7 @@ func praseMultipartResponse(r *httptest.ResponseRecorder) (result map[string][]b
 			return nil, err
 		}
 
-		result[p.FormName()] = payload
+		result[p.FormName()] = string(payload)
 	}
 	return result, nil
 }
