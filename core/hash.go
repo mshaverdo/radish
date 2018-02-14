@@ -21,6 +21,22 @@ func (e *HashEngine) Get(key string) (item *Item) {
 	return e.data[key]
 }
 
+// Get returns *Items mapped to provided keys.
+func (e *HashEngine) GetSubmap(keys []string) (submap map[string]*Item) {
+	submap = make(map[string]*Item, len(keys))
+
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	for _, key := range keys {
+		if item, ok := e.data[key]; ok {
+			submap[key] = item
+		}
+	}
+
+	return submap
+}
+
 // Keys returns all keys existing in the Engine
 func (e *HashEngine) Keys() (keys []string) {
 	e.mu.RLock()
@@ -59,6 +75,22 @@ func (e *HashEngine) Del(keys []string) (count int) {
 		}
 
 		delete(e.data, k)
+	}
+
+	return count
+}
+
+// DelSubmap removes Items only if existing *Item equals to provided submap[key]
+// if key not found in the engine, just skip it and returns count of actually deleted items
+func (e *HashEngine) DelSubmap(submap map[string]*Item) (count int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	for key, item := range submap {
+		if existingItem, ok := e.data[key]; ok && existingItem == item {
+			count++
+			delete(e.data, key)
+		}
 	}
 
 	return count
