@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"time"
 )
 
 //go:generate stringer -type=ItemKind
@@ -15,9 +16,10 @@ const (
 	Dict
 )
 
-//TODO: add expireAt field
 type Item struct {
 	sync.RWMutex
+
+	expireAt time.Time
 
 	kind  ItemKind
 	bytes []byte
@@ -127,4 +129,41 @@ func (i *Item) String() string {
 	default:
 		panic("Program Logic error: unknown Item.kind: " + i.kind.String())
 	}
+}
+
+func (i *Item) SetTtl(seconds int) {
+	if seconds <= 0 {
+		panic("Program Logic error: Trying to set non-positive TTL. To reset TTL use Item.RemoveTtl()")
+	}
+
+	i.expireAt = time.Now().Add(time.Duration(seconds) * time.Second)
+}
+
+func (i *Item) SetMilliTtl(milliseconds int) {
+	if milliseconds <= 0 {
+		panic("Program Logic error: Trying to set non-positive TTL. To reset TTL use Item.RemoveTtl()")
+	}
+
+	i.expireAt = time.Now().Add(time.Duration(milliseconds) * time.Millisecond)
+}
+
+func (i *Item) RemoveTtl() {
+	i.expireAt = time.Time{}
+}
+
+func (i *Item) Ttl() (seconds int) {
+	seconds = int(i.expireAt.Sub(time.Now()).Seconds())
+	if seconds < 0 {
+		seconds = 0
+	}
+
+	return seconds
+}
+
+func (i *Item) IsExpired() bool {
+	return i.HasTtl() && i.expireAt.Before(time.Now())
+}
+
+func (i *Item) HasTtl() bool {
+	return i.expireAt != time.Time{}
 }

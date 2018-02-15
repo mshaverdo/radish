@@ -6,9 +6,17 @@ import (
 	"math"
 )
 
-//TODO: check performace! check Locks waiting!
+//TODO: check performance! check Locks waiting!
 //TODO: if Engine.Lock() will be a bottleneck, try to use sharding by engines
-//TODO: обновление будет применяться для множества операци. Возможно, стоит реализовать его как ProcessUPdate(key, updater func(), updaterParams []string
+
+// configuration
+var (
+	// CollectExpiredBatchSize items processed by CollectExpired()  at once, in single mutex lock to reduce mutex lock overhead
+	CollectExpiredBatchSize = 100
+
+	// If true, Core.Keys() will check every element to isExpire() end exlude expired keys from return
+	KeysCheckTtl = true
+)
 
 var (
 	// ErrNotFound returned by Core API methods when requested key not found
@@ -20,7 +28,10 @@ var (
 // Engine encapsulates concrete concurrency-safe storage engine  -- Btree, hashmap, etc
 type Engine interface {
 	// Get returns reference to Item by key. If Item not exists, return nil
-	Get(key string) *Item
+	Get(key string) (item *Item)
+
+	// Get returns *Items mapped to provided keys.
+	GetSubmap(keys []string) (submap map[string]*Item)
 
 	// AddOrReplace adds new or replaces existing Items in the engine
 	AddOrReplace(items map[string]*Item)
@@ -29,8 +40,13 @@ type Engine interface {
 	// if key not found in the engine, just skip it
 	Del(keys []string) (count int)
 
-	// Keys returns all keys existing in the Engine
-	Keys() []string
+	// DelSubmap removes Items only if existing *Item equals to provided submap[key]
+	// if key not found in the engine, just skip it and returns count of actually deleted items
+	DelSubmap(submap map[string]*Item) (count int)
+
+	// Keys returns all keys existing in the
+	//TODO: check performance in Keys() & CollectExpired(): maybe, it's better to return map[string]*Item to avoid extra Get() in those methods
+	Keys() (keys []string)
 }
 
 // Core provides domain operations on the storage -- get, set, keys, hset, hdel, etc
@@ -43,17 +59,58 @@ func NewCore(engine Engine) *Core {
 	return &Core{engine: engine}
 }
 
+// CollectExpired checks all keys from engine and removes items with expired TTL and return count of actually removed items
+func (c *Core) CollectExpired() (count int) {
+	//TODO: check performance, it could freeze writing operations for a long time!
+	allKeys := c.engine.Keys()
+
+	for len(allKeys) > 0 {
+		batchLen := int(math.Min(float64(CollectExpiredBatchSize), float64(len(allKeys))))
+		batch := allKeys[:batchLen]
+		allKeys = allKeys[batchLen:]
+
+		items := c.engine.GetSubmap(batch)
+		expiredItems := map[string]*Item{}
+		for key, item := range items {
+			item.RLock()
+			if item.IsExpired() {
+				expiredItems[key] = item
+			}
+			item.RUnlock()
+		}
+
+		count += c.engine.DelSubmap(expiredItems)
+	}
+
+	return count
+}
+
 // Keys returns all keys matching glob pattern
+// Warning: consider KEYS as a command that should only be used in production environments with extreme care.
+// It may ruin performance when it is executed against large databases.
 func (c *Core) Keys(pattern string) (result []string) {
 	allKeys := c.engine.Keys()
-	if pattern == "*" {
-		return allKeys
+
+	isFresh := func(key string) bool {
+		if !KeysCheckTtl {
+			return true
+		}
+
+		i := c.engine.Get(key)
+
+		if i == nil {
+			return false
+		}
+
+		i.RLock()
+		defer i.RUnlock()
+		return !i.IsExpired()
 	}
 
 	// pre-allocate slice to avoid reallocation
 	filteredKeys := make([]string, 0, len(allKeys))
 	for _, key := range allKeys {
-		if glob.Glob(pattern, key) {
+		if glob.Glob(pattern, key) && isFresh(key) {
 			filteredKeys = append(filteredKeys, key)
 		}
 	}
@@ -64,7 +121,7 @@ func (c *Core) Keys(pattern string) (result []string) {
 // Get the value of key. If the key does not exist the special value nil is returned.
 // An error is returned if the value stored at key is not a string, because GET only handles string values.
 func (c *Core) Get(key string) (result []byte, err error) {
-	item := c.engine.Get(key)
+	item := c.getItem(key)
 	if item == nil {
 		return nil, nil //ErrNotFound
 	}
@@ -93,6 +150,25 @@ func (c *Core) Set(key string, value []byte) {
 	c.engine.AddOrReplace(map[string]*Item{key: NewItemBytes(value)})
 }
 
+// Set key to hold the string value and set key to timeout after a given number of seconds.
+// If key already holds a value, it is overwritten, regardless of its type.
+// ttl <= 0 leads to deleting record
+func (c *Core) SetEx(key string, value []byte, ttl int) {
+	if value == nil {
+		panic("Program Logic error: trying to to insert nil value into the core")
+	}
+
+	if ttl <= 0 {
+		//item expired before set, just remove it
+		c.Del([]string{key})
+		return
+	}
+
+	item := NewItemBytes(value)
+	item.SetTtl(ttl)
+	c.engine.AddOrReplace(map[string]*Item{key: item})
+}
+
 // Del Removes the specified keys, ignoring not existing and returns count of actually removed values.
 // Due to the system isn't supports replications/slaves,
 // we don't need conflict resolution, so we could simplify deletion:
@@ -111,7 +187,7 @@ func (c *Core) DSet(key, field string, value []byte) (count int, err error) {
 		panic("Program Logic error: trying to to insert nil value into the core")
 	}
 
-	item := c.engine.Get(key)
+	item := c.getItem(key)
 	if item == nil {
 		item = NewItemDict(map[string][]byte{})
 		defer func() {
@@ -138,7 +214,7 @@ func (c *Core) DSet(key, field string, value []byte) (count int, err error) {
 
 // DGet Returns the value associated with field in the dict stored at key.
 func (c *Core) DGet(key, field string) (result []byte, err error) {
-	item := c.engine.Get(key)
+	item := c.getItem(key)
 	if item == nil {
 		return nil, nil //ErrNotFound
 	}
@@ -164,7 +240,7 @@ func (c *Core) DGet(key, field string) (result []byte, err error) {
 
 // Returns all field names in the dict stored at key.
 func (c *Core) DKeys(key, pattern string) (result []string, err error) {
-	item := c.engine.Get(key)
+	item := c.getItem(key)
 	if item == nil {
 		return nil, nil //ErrNotFound
 	}
@@ -180,7 +256,7 @@ func (c *Core) DKeys(key, pattern string) (result []string, err error) {
 
 	// pre-allocate slice to avoid reallocation
 	filteredKeys := make([]string, 0, len(dict))
-	for key, _ := range dict {
+	for key := range dict {
 		if glob.Glob(pattern, key) {
 			filteredKeys = append(filteredKeys, key)
 		}
@@ -193,7 +269,7 @@ func (c *Core) DKeys(key, pattern string) (result []string, err error) {
 // In the returned value, every field name is followed by its value,
 // so the length of the reply is twice the size of the hash.
 func (c *Core) DGetAll(key string) (result [][]byte, err error) {
-	item := c.engine.Get(key)
+	item := c.getItem(key)
 	if item == nil {
 		return nil, nil //ErrNotFound
 	}
@@ -221,7 +297,7 @@ func (c *Core) DGetAll(key string) (result [][]byte, err error) {
 // Specified fields that do not exist within this hash are ignored.
 // If key does not exist, it is treated as an empty hash and this command returns 0.
 func (c *Core) DDel(key string, fields []string) (count int, err error) {
-	item := c.engine.Get(key)
+	item := c.getItem(key)
 	if item == nil {
 		return 0, nil
 	}
@@ -248,7 +324,7 @@ func (c *Core) DDel(key string, fields []string) (count int, err error) {
 // If key does not exist, it is interpreted as an empty list and 0 is returned.
 // An error is returned when the value stored at key is not a list.
 func (c *Core) LLen(key string) (count int, err error) {
-	item := c.engine.Get(key)
+	item := c.getItem(key)
 	if item == nil {
 		return 0, nil //ErrNotFound
 	}
@@ -268,7 +344,7 @@ func (c *Core) LLen(key string) (count int, err error) {
 // These offsets can also be negative numbers indicating offsets starting at the end of the list.
 // For example, -1 is the last element of the list, -2 the penultimate, and so on.
 func (c *Core) LRange(key string, start, stop int) (result [][]byte, err error) {
-	item := c.engine.Get(key)
+	item := c.getItem(key)
 	if item == nil {
 		return nil, nil //ErrNotFound
 	}
@@ -332,7 +408,7 @@ func (c *Core) LRange(key string, start, stop int) (result [][]byte, err error) 
 // Here, -1 means the last element, -2 means the penultimate and so forth.
 // When the value at key is not a list, an error is returned.
 func (c *Core) LIndex(key string, index int) (result []byte, err error) {
-	item := c.engine.Get(key)
+	item := c.getItem(key)
 	if item == nil {
 		return nil, nil //ErrNotFound
 	}
@@ -377,7 +453,7 @@ func (c *Core) LSet(key string, index int, value []byte) (err error) {
 		panic("Program Logic error: trying to to insert nil value into the core")
 	}
 
-	item := c.engine.Get(key)
+	item := c.getItem(key)
 	if item == nil {
 		// LSet replaces only existing element
 		return ErrNotFound
@@ -417,7 +493,7 @@ func (c *Core) LSet(key string, index int, value []byte) (err error) {
 // from the leftmost element to the rightmost element.
 // So for instance the command LPush("mylist",  []byte[a b c]) will result into a list containing [c, b, a]
 func (c *Core) LPush(key string, values [][]byte) (count int, err error) {
-	item := c.engine.Get(key)
+	item := c.getItem(key)
 	if item == nil {
 		item = NewItemList([][]byte{})
 		defer func() {
@@ -448,7 +524,7 @@ func (c *Core) LPush(key string, values [][]byte) (count int, err error) {
 
 // LPop Removes and returns the first element of the list stored at key.
 func (c *Core) LPop(key string) (result []byte, err error) {
-	item := c.engine.Get(key)
+	item := c.getItem(key)
 	if item == nil {
 		return nil, nil
 	}
@@ -472,4 +548,88 @@ func (c *Core) LPop(key string) (result []byte, err error) {
 	item.SetList(list)
 
 	return result, nil
+}
+
+// Ttl Returns the remaining time to live of a key that has a timeout.
+// If key not found, return error, if key found, but has no setted TTL, return -1
+func (c *Core) Ttl(key string) (ttl int, err error) {
+	item := c.getItem(key)
+	if item == nil {
+		return 0, ErrNotFound
+	}
+
+	item.RLock()
+	defer item.RUnlock()
+
+	if !item.HasTtl() {
+		return -1, nil
+	}
+
+	return item.Ttl(), nil
+}
+
+// Set a timeout on key. After the timeout has expired, the key will automatically be deleted.
+// Note that calling EXPIRE with a non-positive timeout will result in the key being deleted rather than expired
+func (c *Core) Expire(key string, seconds int) (err error) {
+	item := c.getItem(key)
+	if item == nil {
+		return ErrNotFound
+	}
+
+	if seconds <= 0 {
+		c.Del([]string{key})
+		return nil
+	}
+
+	item.Lock()
+	defer item.Unlock()
+
+	// check IsExpired() one more time inside the critical section, to avoid updating TTL
+	// for item, that already prepared to removal by CollectExpired()
+	if item.IsExpired() {
+		return ErrNotFound
+	}
+
+	item.SetTtl(seconds)
+
+	return nil
+}
+
+// Persist Removes the existing timeout on key.
+func (c *Core) Persist(key string) (err error) {
+	item := c.getItem(key)
+	if item == nil {
+		return ErrNotFound
+	}
+
+	item.Lock()
+	defer item.Unlock()
+
+	// check IsExpired() one more time inside the critical section, to avoid updating TTL
+	// for item, that already prepared to removal by CollectExpired()
+	if item.IsExpired() {
+		return ErrNotFound
+	}
+
+	item.RemoveTtl()
+
+	return nil
+}
+
+// warning: it could affect performance due to extra mutex lock.
+// if it makes perf. penalty, move  IsExpired() check inside existing Lock() in every API func
+func (c *Core) getItem(key string) *Item {
+	item := c.engine.Get(key)
+	if item == nil {
+		return nil
+	}
+
+	item.RLock()
+	defer item.RUnlock()
+
+	if item.IsExpired() {
+		return nil
+	}
+
+	return item
 }

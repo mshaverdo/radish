@@ -4,9 +4,9 @@ package core
 
 import "strconv"
 
-const _ItemKind_name = "StringListDict"
+const _ItemKind_name = "BytesListDict"
 
-var _ItemKind_index = [...]uint8{0, 6, 10, 14}
+var _ItemKind_index = [...]uint8{0, 5, 9, 13}
 
 func (i ItemKind) String() string {
 	if i < 0 || i >= ItemKind(len(_ItemKind_index)-1) {

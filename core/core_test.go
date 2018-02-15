@@ -14,9 +14,15 @@ type MockEngine struct {
 	data map[string]*Item
 }
 
-func getSampleData() map[string]*Item {
+func getSampleDataCore() map[string]*Item {
+	expiredItem := NewItemBytes([]byte("Expired"))
+	expiredItem.expireAt = time.Now().Add(-1)
+
+	expireLaterItem := NewItemBytes([]byte("Призрак бродит по Европе - призрак коммунизма."))
+	expireLaterItem.SetTtl(1000)
+
 	return map[string]*Item{
-		"bytes": NewItemBytes([]byte("Призрак бродит по Европе - призрак коммунизма.")),
+		"bytes": expireLaterItem,
 		"dict": NewItemDict(map[string][]byte{
 			"banana": []byte("mama"),
 			"測試":     []byte("別れ、比類のない"),
@@ -27,12 +33,13 @@ func getSampleData() map[string]*Item {
 			[]byte("Rammstein"),
 			[]byte("KMFDM"),
 		}),
-		"測": NewItemBytes([]byte("幽霊はヨーロッパを追いかけています - 共産主義の幽霊")),
+		"測":       NewItemBytes([]byte("幽霊はヨーロッパを追いかけています - 共産主義の幽霊")),
+		"expired": expiredItem,
 	}
 }
 
 func NewMockEngine() *MockEngine {
-	return &MockEngine{data: getSampleData()}
+	return &MockEngine{data: getSampleDataCore()}
 }
 
 func (e *MockEngine) Get(key string) (item *Item) {
@@ -61,6 +68,29 @@ func (e *MockEngine) Del(keys []string) (count int) {
 		}
 
 		delete(e.data, k)
+	}
+
+	return count
+}
+
+func (e *MockEngine) GetSubmap(keys []string) (submap map[string]*Item) {
+	submap = make(map[string]*Item, len(keys))
+
+	for _, key := range keys {
+		if item, ok := e.data[key]; ok {
+			submap[key] = item
+		}
+	}
+
+	return submap
+}
+
+func (e *MockEngine) DelSubmap(submap map[string]*Item) (count int) {
+	for key, item := range submap {
+		if existingItem, ok := e.data[key]; ok && existingItem == item {
+			count++
+			delete(e.data, key)
+		}
 	}
 
 	return count
@@ -100,6 +130,7 @@ func TestCore_Get(t *testing.T) {
 		{"bytes", nil, "Призрак бродит по Европе - призрак коммунизма."},
 		{"測", nil, "幽霊はヨーロッパを追いかけています - 共産主義の幽霊"},
 		{"404", nil, ""},
+		{"expired", nil, ""},
 		{"dict", ErrWrongType, ""},
 	}
 
@@ -123,6 +154,7 @@ func TestCore_Set(t *testing.T) {
 	}{
 		{"bytes", "Ктулху фхтагн!"},
 		{"new 測", "共産主義の幽霊"},
+		{"expired", "not expired"},
 	}
 
 	c := NewCore(NewMockEngine())
@@ -145,7 +177,7 @@ func TestCore_Del(t *testing.T) {
 		want []string
 	}{
 		{[]string{"bytes", "list", "404"}, []string{"dict", "測"}},
-		{[]string{"dict", "測"}, []string{}},
+		{[]string{"dict", "測", "expired"}, []string{}},
 	}
 
 	c := NewCore(NewMockEngine())
@@ -169,6 +201,7 @@ func TestCore_DGet(t *testing.T) {
 	}{
 		{"bytes", "", "", ErrWrongType},
 		{"404", "", "", nil},
+		{"expired", "", "", nil},
 		{"dict", "banana", "mama", nil},
 		{"dict", "測試", "別れ、比類のない", nil},
 	}
@@ -193,6 +226,7 @@ func TestCore_DKeys(t *testing.T) {
 		want         []string
 	}{
 		{"bytes", "", ErrWrongType, nil},
+		{"expired", "", nil, nil},
 		{"404", "", nil, nil},
 		{"dict", "b", nil, []string{}},
 		{"dict", "b*", nil, []string{"banana"}},
@@ -223,6 +257,7 @@ func TestCore_DSet(t *testing.T) {
 	}{
 		{"bytes", "", "", ErrWrongType, 0},
 		{"new dict 測", "共", "共産主義の幽霊", nil, 1},
+		{"expired", "not expired", "not expired", nil, 1},
 		{"dict", "共", "共産主義の幽霊", nil, 1},
 		{"dict", "banana", "mango", nil, 0},
 	}
@@ -255,6 +290,7 @@ func TestCore_DGetAll(t *testing.T) {
 	}{
 		{"bytes", nil, ErrWrongType},
 		{"404", map[string]string{}, nil},
+		{"expired", map[string]string{}, nil},
 		{"dict", map[string]string{"banana": "mama", "測試": "別れ、比類のない"}, nil},
 	}
 
@@ -289,6 +325,7 @@ func TestCore_DDel(t *testing.T) {
 	}{
 		{"bytes", nil, ErrWrongType, nil, 0},
 		{"404", []string{"banana", "nothing"}, nil, nil, 0},
+		{"expired", []string{"banana", "nothing"}, nil, nil, 0},
 		{"dict", []string{"banana", "nothing"}, nil, []string{"測試"}, 1},
 	}
 
@@ -320,6 +357,7 @@ func TestCore_LLen(t *testing.T) {
 	}{
 		{"bytes", ErrWrongType, 0},
 		{"404", nil, 0},
+		{"expired", nil, 0},
 		{"list", nil, 3},
 	}
 
@@ -346,6 +384,7 @@ func TestCore_LRange(t *testing.T) {
 	}{
 		{"bytes", 0, 0, ErrWrongType, []string{}},
 		{"404", 0, 0, nil, []string{}},
+		{"expired", 0, 0, nil, []string{}},
 		//IMPORTANT: by proto, HEAD of the list has index 0
 		{"list", 0, 0, nil, []string{"KMFDM"}},
 		{"list", 0, 10, nil, []string{"KMFDM", "Rammstein", "Abba"}},
@@ -386,6 +425,7 @@ func TestCore_LIndex(t *testing.T) {
 	}{
 		{"bytes", 0, ErrWrongType, ""},
 		{"404", 0, nil, ""},
+		{"expired", 0, nil, ""},
 		//IMPORTANT: by proto, HEAD of the list has index 0
 		{"list", 0, nil, "KMFDM"},
 		{"list", 10, nil, ""},
@@ -419,6 +459,7 @@ func TestCore_LSet(t *testing.T) {
 	}{
 		{"bytes", 0, ErrWrongType, ""},
 		{"404", 0, ErrNotFound, ""},
+		{"expired", 0, ErrNotFound, ""},
 		//IMPORTANT: by proto, HEAD of the list has index 0
 		{"list", 10, ErrInvalidParams, ""},
 		{"list", 0, nil, "AC/DC"},
@@ -450,6 +491,7 @@ func TestCore_LPush(t *testing.T) {
 	}{
 		{"bytes", ErrWrongType, nil, nil},
 		{"list_new", nil, []string{"a", "b", "c"}, []string{"c", "b", "a"}},
+		{"expired", nil, []string{"a", "b", "c"}, []string{"c", "b", "a"}},
 		{"list", nil, []string{"a", "b", "c", "d", "e", "AC/DC"}, []string{"AC/DC", "e", "d", "c", "b", "a", "KMFDM", "Rammstein", "Abba"}},
 	}
 
@@ -490,6 +532,7 @@ func TestCore_LPop(t *testing.T) {
 	}{
 		{"bytes", ErrWrongType, "", nil},
 		{"list_new", nil, "", []string{}},
+		{"expired", nil, "", []string{}},
 		{"list", nil, "KMFDM", []string{"Rammstein", "Abba"}},
 	}
 
@@ -516,7 +559,6 @@ func TestCore_LPop(t *testing.T) {
 	}
 }
 
-//TODO: поставить неправильный тип лока (Rlock) на операцию записи и посмотреть, чтобы это отловилось
 type TestCoreConcurrencyTestCase struct {
 	bytes      []string
 	list       []string
@@ -562,15 +604,20 @@ func TestCore_concurrency(t *testing.T) {
 	tests = append(tests, longTest)
 
 	c := NewCore(NewHashEngine())
+
+	stopCollector := make(chan struct{})
+	go coreCollectWorker(c, stopCollector)
+
 	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
-		go coreWorker(&wg, c, tests)
+		go coreConcurrencyWorker(&wg, c, tests)
 	}
 
 	wg.Wait()
+	stopCollector <- struct{}{}
 
-	// Due to last operation of every coreWorker is AddOrReplace() for last keyset
+	// Due to last operation of every coreConcurrencyWorker is AddOrReplace() for last keyset
 	// after all workers done, only last keyset  should remain in the engine
 	got := c.Keys("*")
 	want := append([]string{}, tests[0].bytes...)
@@ -583,11 +630,17 @@ func TestCore_concurrency(t *testing.T) {
 	}
 }
 
-func coreWorker(wg *sync.WaitGroup, c *Core, tests []TestCoreConcurrencyTestCase) {
+// Tests all Core operations to be concurrent-safe
+func coreConcurrencyWorker(wg *sync.WaitGroup, c *Core, tests []TestCoreConcurrencyTestCase) {
 	for _, t := range tests {
 		for _, key := range t.bytes {
 			c.Set(key, []byte(time.Now().String()))
 			c.Get(key)
+
+			c.SetEx(key, []byte(time.Now().String()), 1000)
+			c.Persist(key)
+			c.Expire(key, 1000)
+			c.Ttl(key)
 		}
 		for _, key := range t.dict {
 			for _, field := range t.dictFields {
@@ -634,4 +687,238 @@ func coreWorker(wg *sync.WaitGroup, c *Core, tests []TestCoreConcurrencyTestCase
 	}
 
 	wg.Done()
+}
+
+func TestCore_CollectExpired(t *testing.T) {
+	collectExpiredTestRunner(t, persistWorker)
+	collectExpiredTestRunner(t, expireLaterWorker)
+	collectExpiredTestRunner(t, setWorker)
+}
+
+func collectExpiredTestRunner(
+	t *testing.T,
+	worker func(wg *sync.WaitGroup, core *Core, keys, persisted, failed chan string),
+) {
+	// Initialize
+	keysCount := 10000
+	maxTtl := 50
+	persistWorkersCount := 100
+	keysChan := make(chan string, keysCount)
+	persistedChan := make(chan string, keysCount)
+	failedChan := make(chan string, keysCount)
+	data := map[string]*Item{}
+	for i := 0; i < keysCount; i++ {
+		key := fmt.Sprintf("b_%d", rand.Uint64())
+		item := NewItemBytes([]byte("item: " + key))
+		item.SetMilliTtl(1 + int(rand.Uint32()%uint32(maxTtl)))
+
+		keysChan <- key
+		data[key] = item
+	}
+	close(keysChan)
+
+	expirationTimer := time.After(time.Duration(maxTtl) * time.Millisecond)
+
+	e := NewHashEngine()
+	e.data = data
+	c := NewCore(e)
+	stopCollector := make(chan struct{})
+	wg := sync.WaitGroup{}
+
+	// Run workers
+	go coreCollectWorker(c, stopCollector)
+	for i := 0; i < persistWorkersCount; i++ {
+		wg.Add(1)
+		go worker(&wg, c, keysChan, persistedChan, failedChan)
+	}
+
+	wg.Wait()
+	close(persistedChan)
+	close(failedChan)
+
+	// ensure, that all volatile items expired
+	<-expirationTimer
+	stopCollector <- struct{}{}
+	<-stopCollector
+
+	// Collect results
+	var persistedKeys, failedKeys []string
+	for k := range persistedChan {
+		persistedKeys = append(persistedKeys, k)
+	}
+	for k := range failedChan {
+		failedKeys = append(failedKeys, k)
+	}
+
+	//t.Logf("Persisted: %d, Failed to persist: %d\n", len(persistedKeys), len(failedKeys))
+
+	// Check results
+	var actualKeys []string
+	for k, v := range e.data {
+		if v.IsExpired() {
+			t.Errorf("Expired key in result DB: %q : %q", k, v)
+			continue
+		}
+
+		actualKeys = append(actualKeys, k)
+	}
+
+	sort.Strings(actualKeys)
+	sort.Strings(persistedKeys)
+
+	if diff := deep.Equal(actualKeys, persistedKeys); diff != nil {
+		t.Errorf("actual key not equal persisted keys: %s\n\ngot:%v\n\nwant:%v", diff, actualKeys, persistedKeys)
+	}
+}
+
+func coreCollectWorker(core *Core, stopCollector chan struct{}) {
+	var iterations, totalCount int
+	for {
+		select {
+		case <-stopCollector:
+			//to ensure one more than 1 interation done
+			totalCount += core.CollectExpired()
+			iterations++
+			close(stopCollector)
+			//fmt.Printf("CollectExpired iteration: %d, total items removed: %d\n", iterations, totalCount)
+			return
+		default:
+			totalCount += core.CollectExpired()
+			iterations++
+		}
+	}
+}
+
+func persistWorker(wg *sync.WaitGroup, core *Core, keys, persisted, failed chan string) {
+	for key := range keys {
+		if err := core.Persist(key); err == nil {
+			persisted <- key
+		} else {
+			failed <- key
+		}
+	}
+	wg.Done()
+}
+
+func expireLaterWorker(wg *sync.WaitGroup, core *Core, keys, persisted, failed chan string) {
+	for key := range keys {
+		if err := core.Expire(key, 10000); err == nil {
+			persisted <- key
+		} else {
+			failed <- key
+		}
+	}
+	wg.Done()
+}
+
+func setWorker(wg *sync.WaitGroup, core *Core, keys, persisted, failed chan string) {
+	for key := range keys {
+		core.Set(key, []byte("data"))
+		persisted <- key
+	}
+	wg.Done()
+}
+
+func TestCore_SetEx(t *testing.T) {
+	tests := []struct {
+		key       string
+		value     string
+		ttl       int
+		wantValue string
+	}{
+		{"bytes", "Ктулху фхтагн!", 10, "Ктулху фхтагн!"},
+		{"dict", "dict", 0, ""},
+		{"new 測", "共産主義の幽霊", 11, "共産主義の幽霊"},
+		{"expired", "not expired", 12, "not expired"},
+	}
+
+	engine := NewMockEngine()
+	c := NewCore(engine)
+
+	for _, v := range tests {
+		c.SetEx(v.key, []byte(v.value), v.ttl)
+		got, _ := c.Get(v.key)
+		if string(got) != v.wantValue {
+			t.Errorf("SetEx(%q) got: %q != %q", v.key, string(got), v.value)
+		}
+		if got != nil && engine.data[v.key].Ttl() != v.ttl-1 {
+			t.Errorf("SetEx(%q) ttl: %d != %d, %q", v.key, engine.data[v.key].Ttl(), v.ttl-1, engine.data[v.key])
+		}
+	}
+}
+func TestCore_Persist(t *testing.T) {
+	tests := []struct {
+		key     string
+		wantErr error
+	}{
+		{"bytes", nil},
+		{"404", ErrNotFound},
+		{"expired", ErrNotFound},
+	}
+
+	engine := NewMockEngine()
+	c := NewCore(engine)
+
+	for _, v := range tests {
+		err := c.Persist(v.key)
+		if err != v.wantErr {
+			t.Errorf("Persist(%q) err: %q != %q", v.key, err, v.wantErr)
+		}
+		if err == nil && engine.data[v.key].HasTtl() {
+			t.Errorf("Persist(%q): item still volatile", v.key)
+		}
+	}
+}
+func TestCore_Expire(t *testing.T) {
+	tests := []struct {
+		key        string
+		ttl        int
+		wantErr    error
+		wantExists bool
+	}{
+		{"bytes", 10, nil, true},
+		{"dict", 0, nil, false},
+		{"404", 11, ErrNotFound, false},
+		{"expired", 12, ErrNotFound, false},
+	}
+
+	engine := NewMockEngine()
+	c := NewCore(engine)
+
+	for _, v := range tests {
+		err := c.Expire(v.key, v.ttl)
+		if err != v.wantErr {
+			t.Errorf("Expire(%q) err: %q != %q", v.key, err, v.wantErr)
+		}
+		if got, _ := c.Get(v.key); v.wantExists != (got != nil) {
+			t.Errorf("Expire(%q) existanse: %t != %t", v.key, got != nil, v.wantExists)
+		}
+		if v.wantExists && engine.data[v.key].Ttl() != v.ttl-1 {
+			t.Errorf("Expire(%q) ttl: %d != %d", v.key, engine.data[v.key].Ttl(), v.ttl-1)
+		}
+	}
+}
+func TestCore_Ttl(t *testing.T) {
+	tests := []struct {
+		key     string
+		wantTtl int
+		wantErr error
+	}{
+		{"bytes", 999, nil},
+		{"dict", -1, nil},
+		{"404", 0, ErrNotFound},
+		{"expired", 0, ErrNotFound},
+	}
+
+	c := NewCore(NewMockEngine())
+
+	for _, v := range tests {
+		ttl, err := c.Ttl(v.key)
+		if err != v.wantErr {
+			t.Errorf("Ttl(%q) err: %q != %q", v.key, err, v.wantErr)
+		}
+		if ttl != v.wantTtl {
+			t.Errorf("Ttl(%q) ttl: %d != %d", v.key, ttl, v.wantTtl)
+		}
+	}
 }
