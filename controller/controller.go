@@ -16,8 +16,6 @@ type ApiServer interface {
 	Shutdown() error
 }
 
-//TODO: проверить, почему не загужаются большие бинарные файлы
-
 // Core provides domain operations on the storage -- Get, Set, Keys, etc.
 type Core interface {
 	// CollectExpired removes expired garbage items from the storage
@@ -107,7 +105,7 @@ func New(host string, port int) *Controller {
 
 // ListenAndServe starts a new radish server
 func (c *Controller) ListenAndServe() error {
-	c.runCollector()
+	go c.runCollector()
 	log.Infof("Radish ready to serve at %s:%d", c.host, c.port)
 	return c.srv.ListenAndServe()
 }
@@ -130,7 +128,7 @@ func (c *Controller) runCollector() {
 	tick := time.Tick(c.collectExpiredInterval)
 	for {
 		select {
-		case c.stopChan:
+		case <-c.stopChan:
 			return
 		case <-tick:
 			count := c.core.CollectExpired()
