@@ -637,7 +637,7 @@ func coreConcurrencyWorker(wg *sync.WaitGroup, c *Core, tests []TestCoreConcurre
 			c.Set(key, []byte(time.Now().String()))
 			c.Get(key)
 
-			c.SetEx(key, []byte(time.Now().String()), 1000)
+			c.SetEx(key, 1000, []byte(time.Now().String()))
 			c.Persist(key)
 			c.Expire(key, 1000)
 			c.Ttl(key)
@@ -652,7 +652,7 @@ func coreConcurrencyWorker(wg *sync.WaitGroup, c *Core, tests []TestCoreConcurre
 			c.DDel(key, t.dictFields)
 		}
 		for _, key := range t.list {
-			values := [][]byte{}
+			var values [][]byte
 			for i := 0; i < t.listLen; i++ {
 				values = append(values, []byte(time.Now().String()))
 			}
@@ -812,6 +812,7 @@ func expireLaterWorker(wg *sync.WaitGroup, core *Core, keys, persisted, failed c
 }
 
 func setWorker(wg *sync.WaitGroup, core *Core, keys, persisted, failed chan string) {
+	_ = failed
 	for key := range keys {
 		core.Set(key, []byte("data"))
 		persisted <- key
@@ -836,7 +837,7 @@ func TestCore_SetEx(t *testing.T) {
 	c := NewCore(engine)
 
 	for _, v := range tests {
-		c.SetEx(v.key, []byte(v.value), v.ttl)
+		c.SetEx(v.key, v.ttl, []byte(v.value))
 		got, _ := c.Get(v.key)
 		if string(got) != v.wantValue {
 			t.Errorf("SetEx(%q) got: %q != %q", v.key, string(got), v.value)

@@ -153,19 +153,19 @@ func (c *Core) Set(key string, value []byte) {
 // Set key to hold the string value and set key to timeout after a given number of seconds.
 // If key already holds a value, it is overwritten, regardless of its type.
 // ttl <= 0 leads to deleting record
-func (c *Core) SetEx(key string, value []byte, ttl int) {
+func (c *Core) SetEx(key string, seconds int, value []byte) {
 	if value == nil {
 		panic("Program Logic error: trying to to insert nil value into the core")
 	}
 
-	if ttl <= 0 {
+	if seconds <= 0 {
 		//item expired before set, just remove it
 		c.Del([]string{key})
 		return
 	}
 
 	item := NewItemBytes(value)
-	item.SetTtl(ttl)
+	item.SetTtl(seconds)
 	c.engine.AddOrReplace(map[string]*Item{key: item})
 }
 
@@ -320,7 +320,7 @@ func (c *Core) DDel(key string, fields []string) (count int, err error) {
 	return count, nil
 }
 
-// Returns the length of the list stored at key.
+// LLen Returns the length of the list stored at key.
 // If key does not exist, it is interpreted as an empty list and 0 is returned.
 // An error is returned when the value stored at key is not a list.
 func (c *Core) LLen(key string) (count int, err error) {
@@ -568,7 +568,7 @@ func (c *Core) Ttl(key string) (ttl int, err error) {
 	return item.Ttl(), nil
 }
 
-// Set a timeout on key. After the timeout has expired, the key will automatically be deleted.
+// Expire sets a timeout on key. After the timeout has expired, the key will automatically be deleted.
 // Note that calling EXPIRE with a non-positive timeout will result in the key being deleted rather than expired
 func (c *Core) Expire(key string, seconds int) (err error) {
 	item := c.getItem(key)

@@ -3,6 +3,7 @@ package httpserver
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"github.com/mshaverdo/radish/log"
 	"github.com/mshaverdo/radish/message"
@@ -10,6 +11,7 @@ import (
 	"io/ioutil"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"strings"
 )
 
@@ -67,6 +69,8 @@ func (s *HttpServer) Shutdown() error {
 func (s *HttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//TODO: use code generation to generate routes for commands, with params count check, POST/GET check
 	//TODO: причесать
+	//TODO: add POST/GET chech for idempotent/non-idempotent operations, or remove POST/GET from README
+	//TODO: check birary files upload/download
 	var (
 		request  *message.Request
 		response *message.Response
@@ -93,8 +97,22 @@ func (s *HttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		body := &bytes.Buffer{}
 		writer := multipart.NewWriter(body)
 
-		for key, val := range response.MultiPayloads {
-			_ = writer.WriteField(key, string(val))
+		for _, val := range response.MultiPayloads {
+			mh := make(textproto.MIMEHeader)
+			mh.Set("Content-Type", "text/plain")
+			partWriter, err := writer.CreatePart(mh)
+			if err != nil {
+				log.Errorf("Error writing multipart response: %s", err.Error())
+				http.Error(w, "Error during processing request: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			_, err = partWriter.Write(val)
+			if err != nil {
+				log.Errorf("Error writing multipart response: %s", err.Error())
+				http.Error(w, "Error during processing request: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
 		}
 		err := writer.Close()
 		if err != nil {
@@ -115,9 +133,12 @@ func (s *HttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func getResponseHttpStatus(r *message.Response) int {
 	statusMap := map[message.Status]int{
-		message.StatusOk:       http.StatusOK,
-		message.StatusNotFound: http.StatusNotFound,
-		message.StatusError:    http.StatusInternalServerError,
+		message.StatusOk:               http.StatusOK,
+		message.StatusNotFound:         http.StatusNotFound,
+		message.StatusError:            http.StatusInternalServerError,
+		message.StatusInvalidCommand:   http.StatusInternalServerError,
+		message.StatusTypeMismatch:     http.StatusInternalServerError,
+		message.StatusInvalidArguments: http.StatusInternalServerError,
 	}
 
 	if httpStatus, ok := statusMap[r.Status]; ok {
@@ -127,6 +148,7 @@ func getResponseHttpStatus(r *message.Response) int {
 	}
 }
 
+//TODO: remove meta functionality
 func parseMeta(r *http.Request) map[string]string {
 	meta := make(map[string]string)
 	for key, values := range r.Header {
@@ -139,19 +161,25 @@ func parseMeta(r *http.Request) map[string]string {
 	return meta
 }
 
+// parseMultiPayload parses regular one-part http request and returns message.Request
 func parseSinglePayload(r *http.Request) (req *message.Request, err error) {
-	//TODO: add checks
-	urlparts := strings.Split(r.URL.Path, "/")
+	urlParts := strings.Split(r.URL.Path, "/")
+	if len(urlParts) < 3 {
+		return nil, errors.New("min URL parts count is 3")
+	}
 	payload, err := ioutil.ReadAll(r.Body)
 
-	return message.NewRequest(urlparts[1], urlparts[2:], parseMeta(r), payload, nil), err
+	return message.NewRequestSingle(urlParts[1], urlParts[2:], parseMeta(r), payload), err
 }
 
+// parseMultiPayload parses multipart http request and returns message.Request
 func parseMultiPayload(r *http.Request, mr *multipart.Reader) (req *message.Request, err error) {
-	//TODO: add checks
-	urlparts := strings.Split(r.URL.Path, "/")
+	urlParts := strings.Split(r.URL.Path, "/")
+	if len(urlParts) < 3 {
+		return nil, errors.New("min URL parts count is 3")
+	}
 
-	multipayload := map[string][]byte{}
+	var multiPayload [][]byte
 	for p, err := mr.NextPart(); err == nil; p, err = mr.NextPart() {
 		payload, err := ioutil.ReadAll(p)
 
@@ -160,8 +188,8 @@ func parseMultiPayload(r *http.Request, mr *multipart.Reader) (req *message.Requ
 			return nil, err
 		}
 
-		multipayload[p.FormName()] = payload
+		multiPayload = append(multiPayload, payload)
 	}
 
-	return message.NewRequest(urlparts[1], urlparts[2:], parseMeta(r), nil, multipayload), err
+	return message.NewRequestMulti(urlParts[1], urlParts[2:], parseMeta(r), multiPayload), nil
 }

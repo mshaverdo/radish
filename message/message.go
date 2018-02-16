@@ -1,5 +1,11 @@
 package message
 
+import (
+	"errors"
+	"fmt"
+	"strconv"
+)
+
 // Request is a container, represents a Command, parsed from external API interface
 type Request struct {
 	// Cmd is a Command type
@@ -11,15 +17,48 @@ type Request struct {
 	// Payload carrys value for SET/HSET/etc command
 	Payload []byte
 	// MultiPayloads intended for MSET/HMSET and other bulk commands
-	MultiPayloads map[string][]byte
+	MultiPayloads [][]byte
 }
 
-// NewRequest constructs new Request object
-func NewRequest(cmd string, args []string, meta map[string]string, payload []byte, multiPayloads map[string][]byte) *Request {
-	if len(payload) > 0 && len(multiPayloads) > 0 {
-		panic("Logic error: unable to use BOTH payload AND multiPayloads simultaneously")
+// NewRequestSingle constructs new Request object with single payload
+func NewRequestSingle(cmd string, args []string, meta map[string]string, payload []byte) *Request {
+	return &Request{Cmd: cmd, Args: args, Meta: meta, Payload: payload}
+}
+
+// NewRequestMulti constructs new Request object with multi payloads
+func NewRequestMulti(cmd string, args []string, meta map[string]string, multiPayloads [][]byte) *Request {
+	return &Request{Cmd: cmd, Args: args, Meta: meta, MultiPayloads: multiPayloads}
+}
+
+// GetArgumentInt returns int argument by index i. Return error if unable to parse int, or requested index too big
+func (r *Request) GetArgumentInt(i int) (result int, err error) {
+	if i > len(r.Args)-1 {
+		return 0, errors.New(fmt.Sprintf("Trying to get not existing argument: %d > %d", i, len(r.Args)-1))
 	}
-	return &Request{Cmd: cmd, Args: args, Meta: meta, Payload: payload, MultiPayloads: multiPayloads}
+
+	if result, err = strconv.Atoi(r.Args[i]); err != nil {
+		return 0, errors.New(fmt.Sprintf("Args[%d] isn't int: %q", i, err.Error()))
+	}
+
+	return result, err
+}
+
+// GetArgumentInt returns int argument by index i. Return error if requested index too big
+func (r *Request) GetArgumentString(i int) (result string, err error) {
+	if i > len(r.Args)-1 {
+		return "", errors.New(fmt.Sprintf("Trying to get not existing argument: %d > %d", i, len(r.Args)-1))
+	}
+
+	return r.Args[i], nil
+}
+
+// GetArgumentVariadicString rest of returns string args beginning from i index
+func (r *Request) GetArgumentVariadicString(i int) (result []string, err error) {
+	if i > len(r.Args)-1 {
+		return nil, errors.New(fmt.Sprintf("Trying to get not existing argument: %d > %d", i, len(r.Args)-1))
+	}
+
+	return r.Args[i:], nil
 }
 
 type Status int
@@ -28,22 +67,26 @@ const (
 	StatusOk Status = iota
 	StatusError
 	StatusNotFound
+	StatusInvalidCommand
+	StatusInvalidArguments
+	StatusTypeMismatch
 )
 
 // Response is a container, represents a Response to Request Command
 type Response struct {
 	Status Status
-	// Payload carrys value for SET/HSET/etc command
+	// Payload carrys value for SET/DSET/etc command
 	Payload []byte
-	// MultiPayloads intended for MSET/HMSET and other bulk commands
-	MultiPayloads map[string][]byte
+	// MultiPayloads intended for LPush and other bulk commands
+	MultiPayloads [][]byte
 }
 
-// NewResponse constructs new Response object
-func NewResponse(status Status, payload []byte, multiPayloads map[string][]byte) *Response {
-	if len(payload) > 0 && len(multiPayloads) > 0 {
-		panic("Logic error: unable to use BOTH payload AND multiPayloads simultaneously")
-	}
+// NewResponse constructs new Response object with single payload
+func NewResponseSingle(status Status, payload []byte) *Response {
+	return &Response{Status: status, Payload: payload}
+}
 
-	return &Response{Status: status, Payload: payload, MultiPayloads: multiPayloads}
+// NewResponse constructs new Response object with multi payloads
+func NewResponseMulti(status Status, multiPayloads [][]byte) *Response {
+	return &Response{Status: status, MultiPayloads: multiPayloads}
 }
