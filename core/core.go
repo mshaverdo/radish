@@ -123,7 +123,7 @@ func (c *Core) Keys(pattern string) (result []string) {
 func (c *Core) Get(key string) (result []byte, err error) {
 	item := c.getItem(key)
 	if item == nil {
-		return nil, nil //ErrNotFound
+		return nil, ErrNotFound
 	}
 
 	item.RLock()
@@ -216,7 +216,7 @@ func (c *Core) DSet(key, field string, value []byte) (count int, err error) {
 func (c *Core) DGet(key, field string) (result []byte, err error) {
 	item := c.getItem(key)
 	if item == nil {
-		return nil, nil //ErrNotFound
+		return nil, ErrNotFound
 	}
 
 	item.RLock()
@@ -229,7 +229,7 @@ func (c *Core) DGet(key, field string) (result []byte, err error) {
 	dict := item.Dict()
 	value, ok := dict[field]
 	if !ok {
-		return nil, nil //ErrNotFound
+		return nil, ErrNotFound
 	}
 
 	result = make([]byte, len(value))
@@ -242,7 +242,7 @@ func (c *Core) DGet(key, field string) (result []byte, err error) {
 func (c *Core) DKeys(key, pattern string) (result []string, err error) {
 	item := c.getItem(key)
 	if item == nil {
-		return nil, nil //ErrNotFound
+		return nil, ErrNotFound
 	}
 
 	item.RLock()
@@ -271,7 +271,7 @@ func (c *Core) DKeys(key, pattern string) (result []string, err error) {
 func (c *Core) DGetAll(key string) (result [][]byte, err error) {
 	item := c.getItem(key)
 	if item == nil {
-		return nil, nil //ErrNotFound
+		return nil, ErrNotFound
 	}
 
 	item.RLock()
@@ -326,7 +326,7 @@ func (c *Core) DDel(key string, fields []string) (count int, err error) {
 func (c *Core) LLen(key string) (count int, err error) {
 	item := c.getItem(key)
 	if item == nil {
-		return 0, nil //ErrNotFound
+		return 0, ErrNotFound
 	}
 
 	item.RLock()
@@ -346,7 +346,8 @@ func (c *Core) LLen(key string) (count int, err error) {
 func (c *Core) LRange(key string, start, stop int) (result [][]byte, err error) {
 	item := c.getItem(key)
 	if item == nil {
-		return nil, nil //ErrNotFound
+		// In Redis, LRange on non-exists key returns empty list, not <nil> aka NotFound
+		return nil, nil
 	}
 
 	item.RLock()
@@ -410,7 +411,7 @@ func (c *Core) LRange(key string, start, stop int) (result [][]byte, err error) 
 func (c *Core) LIndex(key string, index int) (result []byte, err error) {
 	item := c.getItem(key)
 	if item == nil {
-		return nil, nil //ErrNotFound
+		return nil, ErrNotFound
 	}
 
 	item.RLock()
@@ -429,7 +430,7 @@ func (c *Core) LIndex(key string, index int) (result []byte, err error) {
 
 	// it also covers LLen == 0
 	if !(0 <= index && index <= lLen-1) {
-		return []byte{}, nil
+		return []byte{}, ErrNotFound
 	}
 
 	//IMPORTANT: by proto, HEAD of the list has index 0, but in the slice storage it is the LAST element of the slice
@@ -526,7 +527,7 @@ func (c *Core) LPush(key string, values [][]byte) (count int, err error) {
 func (c *Core) LPop(key string) (result []byte, err error) {
 	item := c.getItem(key)
 	if item == nil {
-		return nil, nil
+		return nil, ErrNotFound
 	}
 
 	item.Lock()
@@ -539,7 +540,7 @@ func (c *Core) LPop(key string) (result []byte, err error) {
 	list := item.List()
 
 	if len(list) == 0 {
-		return nil, nil
+		return nil, ErrNotFound
 	}
 
 	// don't copy result ,due to it will be removed from list

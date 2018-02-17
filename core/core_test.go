@@ -129,8 +129,8 @@ func TestCore_Get(t *testing.T) {
 	}{
 		{"bytes", nil, "Призрак бродит по Европе - призрак коммунизма."},
 		{"測", nil, "幽霊はヨーロッパを追いかけています - 共産主義の幽霊"},
-		{"404", nil, ""},
-		{"expired", nil, ""},
+		{"404", ErrNotFound, ""},
+		{"expired", ErrNotFound, ""},
 		{"dict", ErrWrongType, ""},
 	}
 
@@ -196,14 +196,16 @@ func TestCore_Del(t *testing.T) {
 
 func TestCore_DGet(t *testing.T) {
 	tests := []struct {
-		key, field, want string
-		err              error
+		key, field string
+		err        error
+		want       string
 	}{
-		{"bytes", "", "", ErrWrongType},
-		{"404", "", "", nil},
-		{"expired", "", "", nil},
-		{"dict", "banana", "mama", nil},
-		{"dict", "測試", "別れ、比類のない", nil},
+		{"bytes", "", ErrWrongType, ""},
+		{"404", "", ErrNotFound, ""},
+		{"expired", "", ErrNotFound, ""},
+		{"dict", "404", ErrNotFound, ""},
+		{"dict", "banana", nil, "mama"},
+		{"dict", "測試", nil, "別れ、比類のない"},
 	}
 
 	c := NewCore(NewMockEngine())
@@ -226,8 +228,8 @@ func TestCore_DKeys(t *testing.T) {
 		want         []string
 	}{
 		{"bytes", "", ErrWrongType, nil},
-		{"expired", "", nil, nil},
-		{"404", "", nil, nil},
+		{"expired", "", ErrNotFound, nil},
+		{"404", "", ErrNotFound, nil},
 		{"dict", "b", nil, []string{}},
 		{"dict", "b*", nil, []string{"banana"}},
 		{"dict", "*", nil, []string{"banana", "測試"}},
@@ -256,7 +258,7 @@ func TestCore_DSet(t *testing.T) {
 		count             int
 	}{
 		{"bytes", "", "", ErrWrongType, 0},
-		{"new dict 測", "共", "共産主義の幽霊", nil, 1},
+		{"404", "共", "共産主義の幽霊", nil, 1},
 		{"expired", "not expired", "not expired", nil, 1},
 		{"dict", "共", "共産主義の幽霊", nil, 1},
 		{"dict", "banana", "mango", nil, 0},
@@ -289,8 +291,8 @@ func TestCore_DGetAll(t *testing.T) {
 		err  error
 	}{
 		{"bytes", nil, ErrWrongType},
-		{"404", map[string]string{}, nil},
-		{"expired", map[string]string{}, nil},
+		{"404", map[string]string{}, ErrNotFound},
+		{"expired", map[string]string{}, ErrNotFound},
 		{"dict", map[string]string{"banana": "mama", "測試": "別れ、比類のない"}, nil},
 	}
 
@@ -356,8 +358,8 @@ func TestCore_LLen(t *testing.T) {
 		want int
 	}{
 		{"bytes", ErrWrongType, 0},
-		{"404", nil, 0},
-		{"expired", nil, 0},
+		{"404", ErrNotFound, 0},
+		{"expired", ErrNotFound, 0},
 		{"list", nil, 3},
 	}
 
@@ -383,9 +385,10 @@ func TestCore_LRange(t *testing.T) {
 		want        []string
 	}{
 		{"bytes", 0, 0, ErrWrongType, []string{}},
+		// IMPORTANT: in Redis Lrange both on not existing list, or with start/stop out of range returns empty list, not <nil> aka NotFound!
 		{"404", 0, 0, nil, []string{}},
 		{"expired", 0, 0, nil, []string{}},
-		//IMPORTANT: by proto, HEAD of the list has index 0
+		// IMPORTANT: by proto, HEAD of the list has index 0
 		{"list", 0, 0, nil, []string{"KMFDM"}},
 		{"list", 0, 10, nil, []string{"KMFDM", "Rammstein", "Abba"}},
 		{"list", 1, 2, nil, []string{"Rammstein", "Abba"}},
@@ -424,15 +427,15 @@ func TestCore_LIndex(t *testing.T) {
 		want  string
 	}{
 		{"bytes", 0, ErrWrongType, ""},
-		{"404", 0, nil, ""},
-		{"expired", 0, nil, ""},
+		{"404", 0, ErrNotFound, ""},
+		{"expired", 0, ErrNotFound, ""},
 		//IMPORTANT: by proto, HEAD of the list has index 0
 		{"list", 0, nil, "KMFDM"},
-		{"list", 10, nil, ""},
+		{"list", 10, ErrNotFound, ""},
 		{"list", 2, nil, "Abba"},
 		{"list", -1, nil, "Abba"},
 		{"list", -3, nil, "KMFDM"},
-		{"list", -10, nil, ""},
+		{"list", -10, ErrNotFound, ""},
 	}
 
 	c := NewCore(NewMockEngine())
@@ -490,7 +493,7 @@ func TestCore_LPush(t *testing.T) {
 		values, want []string
 	}{
 		{"bytes", ErrWrongType, nil, nil},
-		{"list_new", nil, []string{"a", "b", "c"}, []string{"c", "b", "a"}},
+		{"404", nil, []string{"a", "b", "c"}, []string{"c", "b", "a"}},
 		{"expired", nil, []string{"a", "b", "c"}, []string{"c", "b", "a"}},
 		{"list", nil, []string{"a", "b", "c", "d", "e", "AC/DC"}, []string{"AC/DC", "e", "d", "c", "b", "a", "KMFDM", "Rammstein", "Abba"}},
 	}
@@ -531,9 +534,12 @@ func TestCore_LPop(t *testing.T) {
 		wantList   []string
 	}{
 		{"bytes", ErrWrongType, "", nil},
-		{"list_new", nil, "", []string{}},
-		{"expired", nil, "", []string{}},
+		{"404", ErrNotFound, "", []string{}},
+		{"expired", ErrNotFound, "", []string{}},
 		{"list", nil, "KMFDM", []string{"Rammstein", "Abba"}},
+		{"list", nil, "Rammstein", []string{"Abba"}},
+		{"list", nil, "Abba", []string{}},
+		{"list", ErrNotFound, "", []string{}},
 	}
 
 	c := NewCore(NewMockEngine())

@@ -146,7 +146,7 @@ func (c *Controller) getResponseCommandError(cmd string, err error) *message.Res
 		//nil: message.StatusOk,
 		core.ErrInvalidParams: message.StatusInvalidArguments,
 		core.ErrWrongType:     message.StatusTypeMismatch,
-		core.ErrNotFound:      message.StatusTypeMismatch,
+		core.ErrNotFound:      message.StatusNotFound,
 	}
 
 	status, ok := statusMap[err]
