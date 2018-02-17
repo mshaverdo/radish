@@ -1,5 +1,6 @@
 package message
 
+//TODO: move message into controller package
 import (
 	"errors"
 	"fmt"
@@ -61,6 +62,22 @@ func (r *Request) GetArgumentVariadicString(i int) (result []string, err error) 
 	return r.Args[i:], nil
 }
 
+func (r *Request) String() string {
+	multiPayload := make([]string, len(r.MultiPayloads))
+	for i, v := range r.MultiPayloads {
+		multiPayload[i] = string(v)
+	}
+
+	return fmt.Sprintf(
+		"Request{\n\tCmd: %q \n\tArgs: %q \n\tPayload: %q \n\tMultiPayloads: %q \n}",
+		r.Cmd,
+		r.Args,
+		string(r.Payload),
+		multiPayload,
+	)
+}
+
+//go:generate stringer -type=Status
 type Status int
 
 const (
@@ -89,4 +106,18 @@ func NewResponseSingle(status Status, payload []byte) *Response {
 // NewResponse constructs new Response object with multi payloads
 func NewResponseMulti(status Status, multiPayloads [][]byte) *Response {
 	return &Response{Status: status, MultiPayloads: multiPayloads}
+}
+
+func (r *Response) String() string {
+	multiPayload := make([]string, len(r.MultiPayloads))
+	for i, v := range r.MultiPayloads {
+		multiPayload[i] = string(v)
+	}
+
+	return fmt.Sprintf(
+		"Response{\n\tStatus: %q \n\tPayload: %q \n\tMultiPayloads:%q \n}",
+		r.Status,
+		string(r.Payload),
+		multiPayload,
+	)
 }

@@ -12,11 +12,13 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"net/url"
 	"strings"
 )
 
 const (
 	MetaHeaderPrefix = "X-Radish-"
+	StatusHeader     = "X-Radish-Status"
 )
 
 // HttpServer is a implementation of HttpServer interface
@@ -75,23 +77,32 @@ func (s *HttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		request  *message.Request
 		response *message.Response
 	)
+
+	log.Debugf("Received request: %q", r.URL.EscapedPath())
+
 	mr, err := r.MultipartReader()
 	if err == http.ErrNotMultipart {
 		request, err = parseSinglePayload(r)
 	} else if err == nil {
 		request, err = parseMultiPayload(r, mr)
 	} else {
+		log.Notice("Error during processing request: %s", err.Error())
 		http.Error(w, "Error during processing request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	if err != nil {
+		log.Notice("Error during processing request: %s", err.Error())
 		http.Error(w, "Error during processing request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	log.Debugf("Handling request: %s", request)
+
 	response = s.messageHandler.HandleMessage(request)
 	httpStatus := getResponseHttpStatus(response)
+
+	log.Debugf("Sending response: %s", response)
 
 	if len(response.MultiPayloads) > 0 {
 		body := &bytes.Buffer{}
@@ -122,9 +133,11 @@ func (s *HttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		w.Header().Set("Content-Type", writer.FormDataContentType())
+		w.Header().Set(StatusHeader, response.Status.String())
 		w.WriteHeader(httpStatus)
 		io.Copy(w, body)
 	} else {
+		w.Header().Set(StatusHeader, response.Status.String())
 		w.WriteHeader(httpStatus)
 		w.Write(response.Payload)
 	}
@@ -136,9 +149,9 @@ func getResponseHttpStatus(r *message.Response) int {
 		message.StatusOk:               http.StatusOK,
 		message.StatusNotFound:         http.StatusNotFound,
 		message.StatusError:            http.StatusInternalServerError,
-		message.StatusInvalidCommand:   http.StatusInternalServerError,
-		message.StatusTypeMismatch:     http.StatusInternalServerError,
-		message.StatusInvalidArguments: http.StatusInternalServerError,
+		message.StatusInvalidCommand:   http.StatusBadRequest,
+		message.StatusTypeMismatch:     http.StatusBadRequest,
+		message.StatusInvalidArguments: http.StatusBadRequest,
 	}
 
 	if httpStatus, ok := statusMap[r.Status]; ok {
@@ -161,22 +174,43 @@ func parseMeta(r *http.Request) map[string]string {
 	return meta
 }
 
+func getCmdArgs(r *http.Request) (cmd string, args []string, err error) {
+	urlParts := strings.Split(r.URL.EscapedPath(), "/")
+	if len(urlParts) < 3 {
+		return "", nil, errors.New("min URL parts count is 3")
+	}
+
+	cmd, err = url.PathUnescape(urlParts[1])
+	if err != nil {
+		return "", nil, err
+	}
+
+	args = make([]string, len(urlParts[2:]))
+	for i, v := range urlParts[2:] {
+		if args[i], err = url.PathUnescape(v); err != nil {
+			return "", nil, err
+		}
+	}
+
+	return cmd, args, nil
+}
+
 // parseMultiPayload parses regular one-part http request and returns message.Request
 func parseSinglePayload(r *http.Request) (req *message.Request, err error) {
-	urlParts := strings.Split(r.URL.Path, "/")
-	if len(urlParts) < 3 {
-		return nil, errors.New("min URL parts count is 3")
+	cmd, args, err := getCmdArgs(r)
+	if err != nil {
+		return nil, err
 	}
 	payload, err := ioutil.ReadAll(r.Body)
 
-	return message.NewRequestSingle(urlParts[1], urlParts[2:], parseMeta(r), payload), err
+	return message.NewRequestSingle(cmd, args, parseMeta(r), payload), err
 }
 
 // parseMultiPayload parses multipart http request and returns message.Request
 func parseMultiPayload(r *http.Request, mr *multipart.Reader) (req *message.Request, err error) {
-	urlParts := strings.Split(r.URL.Path, "/")
-	if len(urlParts) < 3 {
-		return nil, errors.New("min URL parts count is 3")
+	cmd, args, err := getCmdArgs(r)
+	if err != nil {
+		return nil, err
 	}
 
 	var multiPayload [][]byte
@@ -191,5 +225,5 @@ func parseMultiPayload(r *http.Request, mr *multipart.Reader) (req *message.Requ
 		multiPayload = append(multiPayload, payload)
 	}
 
-	return message.NewRequestMulti(urlParts[1], urlParts[2:], parseMeta(r), multiPayload), nil
+	return message.NewRequestMulti(cmd, args, parseMeta(r), multiPayload), nil
 }

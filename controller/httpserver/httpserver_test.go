@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"github.com/go-test/deep"
+	"github.com/mshaverdo/radish/log"
 	"github.com/mshaverdo/radish/message"
 	"io/ioutil"
 	"mime"
@@ -11,8 +12,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"net/url"
 	"testing"
 )
+
+func init() {
+	// set lowest log level to prevent test output pollution
+	log.SetLevel(log.CRITICAL)
+}
 
 //TODO: Refactor this test
 type MockMessageHandler struct {
@@ -34,9 +41,10 @@ func (m *MockMessageHandler) HandleMessage(request *message.Request) *message.Re
 
 	status := message.StatusOk
 	statuses := map[string]message.Status{
-		"OK":       message.StatusOk,
-		"ERROR":    message.StatusError,
-		"NOTFOUND": message.StatusNotFound,
+		"OK":        message.StatusOk,
+		"ERROR":     message.StatusError,
+		"WRONGTYPE": message.StatusTypeMismatch,
+		"NOTFOUND":  message.StatusNotFound,
 	}
 	if len(request.Args) > 0 {
 		status = statuses[request.Args[0]]
@@ -55,44 +63,67 @@ func (m *MockMessageHandler) HandleMessage(request *message.Request) *message.Re
 
 func TestHttpServer_ServeHTTP(t *testing.T) {
 	var tests = []struct {
-		usePost       bool
-		uri           string
-		payload       string
-		multiPayloads []string
-		wantMessage   *message.Request
-		wantStatus    int
+		usePost          bool
+		url              string
+		payload          string
+		multiPayloads    []string
+		wantMessage      *message.Request
+		wantHttpStatus   int
+		wantRadishStatus message.Status
 	}{
 		{
-			false,
-			"http://localhost:8380/KEYS",
+			true,
+			"http://localhost:6380/DEL/OK1/%D1%84%D1%8B%2F%D0%B2%D0%B0%0A", //"http://localhost:6380/DEL/OK1/" + url.PathEscape("фы/ва\n"),
 			"",
 			nil,
-			message.NewRequestSingle("KEYS", []string{}, map[string]string{}, []byte("")),
+			message.NewRequestSingle("DEL", []string{"OK1", "фы/ва\n"}, map[string]string{}, []byte("")),
 			http.StatusOK,
+			message.StatusOk,
 		},
 		{
 			false,
-			"http://localhost:8380/GET/NOTFOUND",
+			"http://localhost:6380/INVALID_SHORT_REQUEST",
+			"",
+			nil,
+			nil,
+			http.StatusBadRequest,
+			message.StatusOk,
+		},
+		{
+			false,
+			"http://localhost:6380/KEYS/" + url.PathEscape("*"),
+			"",
+			nil,
+			message.NewRequestSingle("KEYS", []string{"*"}, map[string]string{}, []byte("")),
+			http.StatusOK,
+			message.StatusOk,
+		},
+		{
+			false,
+			"http://localhost:6380/GET/NOTFOUND",
 			"",
 			nil,
 			message.NewRequestSingle("GET", []string{"NOTFOUND"}, map[string]string{}, []byte("")),
 			http.StatusNotFound,
+			message.StatusNotFound,
 		},
 		{
 			true,
-			"http://localhost:8380/DEL/OK1/OK2",
-			"",
-			nil,
-			message.NewRequestSingle("DEL", []string{"OK1", "OK2"}, map[string]string{}, []byte("")),
-			http.StatusOK,
-		},
-		{
-			true,
-			"http://localhost:8380/LPUSH/OK",
+			"http://localhost:6380/LPUSH/OK",
 			"",
 			[]string{"val1", "ЫФ3\n\"\r"},
 			message.NewRequestMulti("LPUSH", []string{"OK"}, map[string]string{}, [][]byte{[]byte("val1"), []byte("ЫФ3\n\"\r")}),
 			http.StatusOK,
+			message.StatusOk,
+		},
+		{
+			true,
+			"http://localhost:6380/LPUSH/WRONGTYPE",
+			"",
+			nil,
+			message.NewRequestSingle("LPUSH", []string{"WRONGTYPE"}, map[string]string{}, []byte("")),
+			http.StatusBadRequest,
+			message.StatusTypeMismatch,
 		},
 	}
 
@@ -100,35 +131,66 @@ func TestHttpServer_ServeHTTP(t *testing.T) {
 		mockHandler := newMockMessageHandler()
 		s := New("", 0, mockHandler)
 		recorder := httptest.NewRecorder()
-		req := newMockRequest(test.usePost, test.uri, test.payload, test.multiPayloads)
+		req := newMockRequest(test.usePost, test.url, test.payload, test.multiPayloads)
 		s.ServeHTTP(recorder, req)
 
-		if diff := deep.Equal(mockHandler.lastRequest, test.wantMessage); diff != nil {
-			t.Errorf("Received message differs from expected: %s", diff)
+		if recorder.Code != test.wantHttpStatus {
+			t.Errorf("%q Invalid status code: got %d, want %d", test.url, recorder.Code, test.wantHttpStatus)
 		}
 
-		if recorder.Code != test.wantStatus {
-			t.Errorf("%q Invalid status code: got %d, want %d", test.uri, recorder.Code, test.wantStatus)
+		if diff := deep.Equal(mockHandler.lastRequest, test.wantMessage); diff != nil {
+			t.Errorf(
+				"%q Received message differs from expected: %s \ngot: %s \nwant: %s",
+				test.url,
+				diff,
+				mockHandler.lastRequest,
+				test.wantMessage,
+			)
+		}
+
+		if test.wantMessage == nil {
+			// SKIP any further checks due to HandleMessage() wasn't invoked
+			continue
+		}
+
+		if recorder.Header().Get(StatusHeader) != test.wantRadishStatus.String() {
+			t.Errorf(
+				"%q Invalid radish status code: got %q, want %q",
+				test.url,
+				recorder.Header().Get(StatusHeader),
+				test.wantRadishStatus.String(),
+			)
 		}
 
 		if len(test.multiPayloads) > 0 {
 			multiPayloads, err := praseMultipartResponse(recorder)
 			if err != nil {
-				t.Errorf("%q Unable to parse multipart response: %s", test.uri, err.Error())
+				t.Errorf("%q Unable to parse multipart response: %s", test.url, err.Error())
 			}
 
 			if diff := deep.Equal(multiPayloads, mockHandler.responseMultiPayloads); diff != nil {
-				t.Errorf("%q Invalid payload : %s\n\ngot: %q\n\nwant: %q", test.uri, diff, multiPayloads, mockHandler.responseMultiPayloads)
+				t.Errorf(
+					"%q Invalid payload : %s\n\ngot: %q\n\nwant: %q",
+					test.url,
+					diff,
+					multiPayloads,
+					mockHandler.responseMultiPayloads,
+				)
 			}
 		} else {
-			if diff := deep.Equal(recorder.Body.String(), mockHandler.responseSinglePayload); diff != nil {
-				t.Errorf("%q Invalid payload : %s", test.uri, diff)
+			if recorder.Body.String() != mockHandler.responseSinglePayload {
+				t.Errorf(
+					"%q Invalid payload : %q != %q",
+					test.url,
+					recorder.Body.String(),
+					mockHandler.responseSinglePayload,
+				)
 			}
 		}
 	}
 }
 
-func newMockRequest(usePost bool, uri string, payload string, multiPayloads []string) (req *http.Request) {
+func newMockRequest(usePost bool, url string, payload string, multiPayloads []string) (req *http.Request) {
 	method := map[bool]string{true: "POST", false: "GET"}[usePost]
 
 	if len(multiPayloads) > 0 {
@@ -137,17 +199,17 @@ func newMockRequest(usePost bool, uri string, payload string, multiPayloads []st
 
 		for _, val := range multiPayloads {
 			mh := make(textproto.MIMEHeader)
-			mh.Set("Content-Type", "text/plain")
+			mh.Set("Content-Type", "application/octet-stream")
 			partWriter, _ := writer.CreatePart(mh)
 			partWriter.Write([]byte(val))
 		}
 
 		writer.Close()
 
-		req = httptest.NewRequest(method, uri, body)
+		req = httptest.NewRequest(method, url, body)
 		req.Header.Set("Content-Type", writer.FormDataContentType())
 	} else {
-		req = httptest.NewRequest(method, uri, bytes.NewReader([]byte(payload)))
+		req = httptest.NewRequest(method, url, bytes.NewReader([]byte(payload)))
 	}
 
 	return req
