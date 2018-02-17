@@ -228,8 +228,8 @@ func TestCore_DKeys(t *testing.T) {
 		want         []string
 	}{
 		{"bytes", "", ErrWrongType, nil},
-		{"expired", "", ErrNotFound, nil},
-		{"404", "", ErrNotFound, nil},
+		{"expired", "", nil, nil},
+		{"404", "", nil, nil},
 		{"dict", "b", nil, []string{}},
 		{"dict", "b*", nil, []string{"banana"}},
 		{"dict", "*", nil, []string{"banana", "測試"}},
@@ -291,8 +291,8 @@ func TestCore_DGetAll(t *testing.T) {
 		err  error
 	}{
 		{"bytes", nil, ErrWrongType},
-		{"404", map[string]string{}, ErrNotFound},
-		{"expired", map[string]string{}, ErrNotFound},
+		{"404", map[string]string{}, nil},
+		{"expired", map[string]string{}, nil},
 		{"dict", map[string]string{"banana": "mama", "測試": "別れ、比類のない"}, nil},
 	}
 
@@ -358,8 +358,8 @@ func TestCore_LLen(t *testing.T) {
 		want int
 	}{
 		{"bytes", ErrWrongType, 0},
-		{"404", ErrNotFound, 0},
-		{"expired", ErrNotFound, 0},
+		{"404", nil, 0},
+		{"expired", nil, 0},
 		{"list", nil, 3},
 	}
 
@@ -848,8 +848,8 @@ func TestCore_SetEx(t *testing.T) {
 		if string(got) != v.wantValue {
 			t.Errorf("SetEx(%q) got: %q != %q", v.key, string(got), v.value)
 		}
-		if got != nil && engine.data[v.key].Ttl() != v.ttl-1 {
-			t.Errorf("SetEx(%q) ttl: %d != %d, %q", v.key, engine.data[v.key].Ttl(), v.ttl-1, engine.data[v.key])
+		if got != nil && engine.data[v.key].Ttl() != v.ttl {
+			t.Errorf("SetEx(%q) ttl: %d != %d, %q", v.key, engine.data[v.key].Ttl(), v.ttl, engine.data[v.key])
 		}
 	}
 }
@@ -900,8 +900,8 @@ func TestCore_Expire(t *testing.T) {
 		if got, _ := c.Get(v.key); v.wantExists != (got != nil) {
 			t.Errorf("Expire(%q) existanse: %t != %t", v.key, got != nil, v.wantExists)
 		}
-		if v.wantExists && engine.data[v.key].Ttl() != v.ttl-1 {
-			t.Errorf("Expire(%q) ttl: %d != %d", v.key, engine.data[v.key].Ttl(), v.ttl-1)
+		if v.wantExists && engine.data[v.key].Ttl() != v.ttl {
+			t.Errorf("Expire(%q) ttl: %d != %d", v.key, engine.data[v.key].Ttl(), v.ttl)
 		}
 	}
 }
@@ -911,7 +911,7 @@ func TestCore_Ttl(t *testing.T) {
 		wantTtl int
 		wantErr error
 	}{
-		{"bytes", 999, nil},
+		{"bytes", 1000, nil},
 		{"dict", -1, nil},
 		{"404", 0, ErrNotFound},
 		{"expired", 0, ErrNotFound},

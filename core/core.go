@@ -8,6 +8,7 @@ import (
 
 //TODO: check performance! check Locks waiting!
 //TODO: if Engine.Lock() will be a bottleneck, try to use sharding by engines
+//TODO: make Expire, ttl, persist as in Redis (return int instead an error)
 
 // configuration
 var (
@@ -242,7 +243,8 @@ func (c *Core) DGet(key, field string) (result []byte, err error) {
 func (c *Core) DKeys(key, pattern string) (result []string, err error) {
 	item := c.getItem(key)
 	if item == nil {
-		return nil, ErrNotFound
+		// In Redis, LRange on non-exists key returns empty list, not <nil> aka NotFound
+		return nil, nil
 	}
 
 	item.RLock()
@@ -271,7 +273,8 @@ func (c *Core) DKeys(key, pattern string) (result []string, err error) {
 func (c *Core) DGetAll(key string) (result [][]byte, err error) {
 	item := c.getItem(key)
 	if item == nil {
-		return nil, ErrNotFound
+		// In Redis, LRange on non-exists key returns empty list, not <nil> aka NotFound
+		return nil, nil
 	}
 
 	item.RLock()
@@ -326,7 +329,8 @@ func (c *Core) DDel(key string, fields []string) (count int, err error) {
 func (c *Core) LLen(key string) (count int, err error) {
 	item := c.getItem(key)
 	if item == nil {
-		return 0, ErrNotFound
+		// In Redis, LRange on non-exists key returns empty list, not <nil> aka NotFound
+		return 0, nil
 	}
 
 	item.RLock()

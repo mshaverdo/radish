@@ -152,7 +152,7 @@ func (i *Item) RemoveTtl() {
 }
 
 func (i *Item) Ttl() (seconds int) {
-	seconds = int(i.expireAt.Sub(time.Now()).Seconds())
+	seconds = int(i.expireAt.Sub(time.Now()).Seconds() + 0.5) //round value
 	if seconds < 0 {
 		seconds = 0
 	}
