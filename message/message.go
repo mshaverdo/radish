@@ -1,6 +1,5 @@
 package message
 
-//TODO: move message into controller package
 import (
 	"errors"
 	"fmt"
