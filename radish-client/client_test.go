@@ -24,10 +24,6 @@ type TestCase struct {
 	wantData string
 }
 
-type Resulter interface {
-	Result() (interface{}, error)
-}
-
 func TestClient(t *testing.T) {
 	//*
 	log.SetLevel(log.CRITICAL)

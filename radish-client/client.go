@@ -91,8 +91,8 @@ func (c *Client) HSet(key, field string, value interface{}) *BoolResult {
 }
 
 // HGetAll Returns all fields and values of the hash stored at key.
-func (c *Client) HGetAll(pattern string) *StringStringMapResult {
-	url := c.getUrl("DGETALL", pattern)
+func (c *Client) HGetAll(key string) *StringStringMapResult {
+	url := c.getUrl("DGETALL", key)
 	payload, err := c.requestSingleMulti(false, url, nil)
 	return newStringStringMapResult(payload, err)
 }
@@ -185,40 +185,20 @@ func (c *Client) TTL(key string) *DurationResult {
 	url := c.getUrl("TTL", key)
 	payload, err := c.requestSingleSingle(false, url, nil)
 
-	// Hack server response to act as Redis client
-	if err == ErrNotFound {
-		payload = []byte("-2")
-		err = nil
-	}
-
 	return newDurationResult(payload, err)
 }
 
 // Expire sets a timeout on key. After the timeout has expired, the key will automatically be deleted.
 func (c *Client) Expire(key string, expiration time.Duration) *BoolResult {
 	url := c.getUrl("EXPIRE", key, strconv.Itoa(int(expiration.Seconds())))
-	_, err := c.requestSingleSingle(true, url, nil)
-
-	// Hack server response to act as Redis client
-	val := []byte("1")
-	if err == ErrNotFound {
-		val = []byte("0")
-		err = nil
-	}
+	val, err := c.requestSingleSingle(true, url, nil)
 	return newBoolResult(val, err)
 }
 
 // Persist Removes the existing timeout on key.
 func (c *Client) Persist(key string) *BoolResult {
 	url := c.getUrl("PERSIST", key)
-	_, err := c.requestSingleSingle(true, url, nil)
-
-	// Hack server response to act as Redis client
-	val := []byte("1")
-	if err == ErrNotFound {
-		val = []byte("0")
-		err = nil
-	}
+	val, err := c.requestSingleSingle(true, url, nil)
 	return newBoolResult(val, err)
 }
 

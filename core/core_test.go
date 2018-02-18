@@ -797,7 +797,7 @@ func coreCollectWorker(core *Core, stopCollector chan struct{}) {
 
 func persistWorker(wg *sync.WaitGroup, core *Core, keys, persisted, failed chan string) {
 	for key := range keys {
-		if err := core.Persist(key); err == nil {
+		if core.Persist(key) == 1 {
 			persisted <- key
 		} else {
 			failed <- key
@@ -808,7 +808,7 @@ func persistWorker(wg *sync.WaitGroup, core *Core, keys, persisted, failed chan 
 
 func expireLaterWorker(wg *sync.WaitGroup, core *Core, keys, persisted, failed chan string) {
 	for key := range keys {
-		if err := core.Expire(key, 10000); err == nil {
+		if core.Expire(key, 10000) == 1 {
 			persisted <- key
 		} else {
 			failed <- key
@@ -855,23 +855,23 @@ func TestCore_SetEx(t *testing.T) {
 }
 func TestCore_Persist(t *testing.T) {
 	tests := []struct {
-		key     string
-		wantErr error
+		key        string
+		wantResult int
 	}{
-		{"bytes", nil},
-		{"404", ErrNotFound},
-		{"expired", ErrNotFound},
+		{"bytes", 1},
+		{"404", 0},
+		{"expired", 0},
 	}
 
 	engine := NewMockEngine()
 	c := NewCore(engine)
 
 	for _, v := range tests {
-		err := c.Persist(v.key)
-		if err != v.wantErr {
-			t.Errorf("Persist(%q) err: %q != %q", v.key, err, v.wantErr)
+		result := c.Persist(v.key)
+		if result != v.wantResult {
+			t.Errorf("Persist(%q) result: %q != %q", v.key, result, v.wantResult)
 		}
-		if err == nil && engine.data[v.key].HasTtl() {
+		if result == 1 && engine.data[v.key].HasTtl() {
 			t.Errorf("Persist(%q): item still volatile", v.key)
 		}
 	}
@@ -880,22 +880,22 @@ func TestCore_Expire(t *testing.T) {
 	tests := []struct {
 		key        string
 		ttl        int
-		wantErr    error
+		wantResult int
 		wantExists bool
 	}{
-		{"bytes", 10, nil, true},
-		{"dict", 0, nil, false},
-		{"404", 11, ErrNotFound, false},
-		{"expired", 12, ErrNotFound, false},
+		{"bytes", 10, 1, true},
+		{"dict", 0, 1, false},
+		{"404", 11, 0, false},
+		{"expired", 12, 0, false},
 	}
 
 	engine := NewMockEngine()
 	c := NewCore(engine)
 
 	for _, v := range tests {
-		err := c.Expire(v.key, v.ttl)
-		if err != v.wantErr {
-			t.Errorf("Expire(%q) err: %q != %q", v.key, err, v.wantErr)
+		result := c.Expire(v.key, v.ttl)
+		if result != v.wantResult {
+			t.Errorf("Expire(%q) result: %q != %q", v.key, result, v.wantResult)
 		}
 		if got, _ := c.Get(v.key); v.wantExists != (got != nil) {
 			t.Errorf("Expire(%q) existanse: %t != %t", v.key, got != nil, v.wantExists)
@@ -913,8 +913,8 @@ func TestCore_Ttl(t *testing.T) {
 	}{
 		{"bytes", 1000, nil},
 		{"dict", -1, nil},
-		{"404", 0, ErrNotFound},
-		{"expired", 0, ErrNotFound},
+		{"404", -2, nil},
+		{"expired", -2, nil},
 	}
 
 	c := NewCore(NewMockEngine())

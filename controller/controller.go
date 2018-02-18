@@ -73,10 +73,10 @@ type Core interface {
 	Ttl(key string) (ttl int, err error)
 
 	// Expire Sets a timeout on key. After the timeout has expired, the key will automatically be deleted.
-	Expire(key string, seconds int) (err error)
+	Expire(key string, seconds int) (result int)
 
 	// Persist Removes the existing timeout on key.
-	Persist(key string) (err error)
+	Persist(key string) (result int)
 }
 
 type Controller struct {
@@ -441,24 +441,18 @@ func (c *Controller) processCommand(r *message.Request) *message.Response {
 			return c.getResponseInvalidArguments(r.Cmd, err)
 		}
 
-		err = c.core.Expire(arg0, arg1)
-		if err != nil {
-			return c.getResponseCommandError(r.Cmd, err)
-		}
+		result := c.core.Expire(arg0, arg1)
 
-		return c.getResponseEmptyPayload()
+		return c.getResponseIntPayload(result)
 	case "PERSIST":
 		arg0, err := r.GetArgumentString(0)
 		if err != nil {
 			return c.getResponseInvalidArguments(r.Cmd, err)
 		}
 
-		err = c.core.Persist(arg0)
-		if err != nil {
-			return c.getResponseCommandError(r.Cmd, err)
-		}
+		result := c.core.Persist(arg0)
 
-		return c.getResponseEmptyPayload()
+		return c.getResponseIntPayload(result)
 	default:
 		return message.NewResponseSingle(
 			message.StatusInvalidCommand,

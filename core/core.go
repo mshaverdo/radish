@@ -560,7 +560,8 @@ func (c *Core) LPop(key string) (result []byte, err error) {
 func (c *Core) Ttl(key string) (ttl int, err error) {
 	item := c.getItem(key)
 	if item == nil {
-		return 0, ErrNotFound
+		// In redis, not found key don't causes error, just return -2
+		return -2, nil
 	}
 
 	item.RLock()
@@ -575,15 +576,15 @@ func (c *Core) Ttl(key string) (ttl int, err error) {
 
 // Expire sets a timeout on key. After the timeout has expired, the key will automatically be deleted.
 // Note that calling EXPIRE with a non-positive timeout will result in the key being deleted rather than expired
-func (c *Core) Expire(key string, seconds int) (err error) {
+func (c *Core) Expire(key string, seconds int) (result int) {
 	item := c.getItem(key)
 	if item == nil {
-		return ErrNotFound
+		return 0
 	}
 
 	if seconds <= 0 {
 		c.Del([]string{key})
-		return nil
+		return 1
 	}
 
 	item.Lock()
@@ -592,19 +593,19 @@ func (c *Core) Expire(key string, seconds int) (err error) {
 	// check IsExpired() one more time inside the critical section, to avoid updating TTL
 	// for item, that already prepared to removal by CollectExpired()
 	if item.IsExpired() {
-		return ErrNotFound
+		return 0
 	}
 
 	item.SetTtl(seconds)
 
-	return nil
+	return 1
 }
 
 // Persist Removes the existing timeout on key.
-func (c *Core) Persist(key string) (err error) {
+func (c *Core) Persist(key string) (result int) {
 	item := c.getItem(key)
 	if item == nil {
-		return ErrNotFound
+		return 0
 	}
 
 	item.Lock()
@@ -613,12 +614,12 @@ func (c *Core) Persist(key string) (err error) {
 	// check IsExpired() one more time inside the critical section, to avoid updating TTL
 	// for item, that already prepared to removal by CollectExpired()
 	if item.IsExpired() {
-		return ErrNotFound
+		return 0
 	}
 
 	item.RemoveTtl()
 
-	return nil
+	return 1
 }
 
 // warning: it could affect performance due to extra mutex lock.
