@@ -1,9 +1,11 @@
 package core
 
 import (
+	"encoding/gob"
 	"errors"
 	"github.com/ryanuber/go-glob"
 	"math"
+	"os"
 )
 
 //TODO: check performance! check Locks waiting!
@@ -638,4 +640,30 @@ func (c *Core) getItem(key string) *Item {
 	}
 
 	return item
+}
+
+// DumpData dumps storage data to specified file.
+// It is NOT thread-safe
+func (c *Core) DumpData(filename string) error {
+	//TODO: слишком большой gob-файл. дублируются поля. вероятно, из-за того, что в Item сделаа сериализация отдельно
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	enc := gob.NewEncoder(file)
+	return enc.Encode(c.engine)
+}
+
+// RestoreData restores data from file.
+func (c *Core) RestoreData(filename string) error {
+	file, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	dec := gob.NewDecoder(file)
+	return dec.Decode(c.engine)
 }

@@ -1,6 +1,15 @@
 package core
 
-import "sync"
+import (
+	"bytes"
+	"encoding/gob"
+	"sync"
+)
+
+// register HashEngine as Engine implementation for GOB
+func init() {
+	gob.Register(HashEngine{})
+}
 
 //For in-memory storage (not on disc) hashmap should be faster thar b-tree
 type HashEngine struct {
@@ -94,4 +103,17 @@ func (e *HashEngine) DelSubmap(submap map[string]*Item) (count int) {
 	}
 
 	return count
+}
+
+func (e *HashEngine) GobEncode() ([]byte, error) {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(&e.data)
+
+	return buf.Bytes(), err
+}
+
+func (e *HashEngine) GobDecode(gobData []byte) error {
+	dec := gob.NewDecoder(bytes.NewReader(gobData))
+	return dec.Decode(&e.data)
 }

@@ -1,6 +1,8 @@
 package core
 
 import (
+	"bytes"
+	"encoding/gob"
 	"fmt"
 	"sort"
 	"sync"
@@ -166,4 +168,50 @@ func (i *Item) IsExpired() bool {
 
 func (i *Item) HasTtl() bool {
 	return i.expireAt != time.Time{}
+}
+
+//TODO: maybe, it's a good idea to add Version field?
+type gobItemExport struct {
+	ExpireAt time.Time
+
+	Kind  ItemKind
+	Bytes []byte
+	List  [][]byte
+	Dict  map[string][]byte
+}
+
+func (i *Item) GobEncode() ([]byte, error) {
+	data := gobItemExport{
+		ExpireAt: i.expireAt,
+
+		Kind:  i.kind,
+		Bytes: i.bytes,
+		List:  i.list,
+		Dict:  i.dict,
+	}
+
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(&data)
+
+	return buf.Bytes(), err
+}
+
+func (i *Item) GobDecode(gobData []byte) error {
+	data := gobItemExport{}
+
+	dec := gob.NewDecoder(bytes.NewReader(gobData))
+	err := dec.Decode(&data)
+
+	if err != nil {
+		return err
+	}
+
+	i.expireAt = data.ExpireAt
+	i.kind = data.Kind
+	i.bytes = data.Bytes
+	i.list = data.List
+	i.dict = data.Dict
+
+	return nil
 }
