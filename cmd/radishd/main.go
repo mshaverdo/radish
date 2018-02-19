@@ -10,18 +10,29 @@ import (
 )
 
 func main() {
+	//TODO: сделать (найти) паект assert с ссответствующими функциями и использовать его вместо if... panic
 	var (
-		host                        string
+		host, dataDir               string
 		port                        int
 		quiet, verbose, veryVerbose bool
 	)
 
 	flag.StringVar(&host, "h", "", "The listening host.")
 	flag.IntVar(&port, "p", 6380, "The listening port.")
+	flag.StringVar(&dataDir, "d", "./", "Data dir")
 	flag.BoolVar(&verbose, "v", false, "Enable verbose logging.")
 	flag.BoolVar(&quiet, "q", false, "Quiet logging. Totally silent.")
 	flag.BoolVar(&veryVerbose, "vv", false, "Enable very verbose logging.")
 	flag.Parse()
+
+	//TODO: вывести наружу настройки контроллера:
+	/*
+
+		collectExpiredInterval time.Duration
+		takeSnapshotInterval   time.Duration
+		syncPolicy             SyncPolicy
+		и другие если добавились
+	*/
 
 	switch {
 	case veryVerbose:
@@ -34,7 +45,7 @@ func main() {
 		log.SetLevel(log.WARNING)
 	}
 
-	c := controller.New(host, port)
+	c := controller.New(host, port, dataDir)
 
 	go handleSignals(c)
 

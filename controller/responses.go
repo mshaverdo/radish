@@ -17,11 +17,12 @@ func getResponseCommandError(cmd string, err error) *message.Response {
 		core.ErrInvalidParams: message.StatusInvalidArguments,
 		core.ErrWrongType:     message.StatusTypeMismatch,
 		core.ErrNotFound:      message.StatusNotFound,
+		ErrServerShutdown:     message.StatusError,
 	}
 
 	status, ok := statusMap[err]
 	if !ok {
-		panic("Program logic error: unknown error: %q" + err.Error())
+		panic("Program logic error: unknown error: " + err.Error())
 	}
 
 	return message.NewResponseSingle(

@@ -14,6 +14,7 @@ import (
 	"net/textproto"
 	"net/url"
 	"testing"
+	"time"
 )
 
 func init() {
@@ -133,6 +134,12 @@ func TestHttpServer_ServeHTTP(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		req := newMockRequest(test.usePost, test.url, test.payload, test.multiPayloads)
 		s.ServeHTTP(recorder, req)
+
+		// clead request times to avoid nanosecond differences
+		if test.wantMessage != nil {
+			test.wantMessage.Time = time.Time{}
+			mockHandler.lastRequest.Time = time.Time{}
+		}
 
 		if recorder.Code != test.wantHttpStatus {
 			t.Errorf("%q Invalid status code: got %d, want %d", test.url, recorder.Code, test.wantHttpStatus)

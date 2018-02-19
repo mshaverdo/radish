@@ -1,10 +1,20 @@
 package controller
 
 import (
+	"encoding/gob"
+	"errors"
+	"fmt"
 	"github.com/mshaverdo/radish/controller/httpserver"
 	"github.com/mshaverdo/radish/core"
 	"github.com/mshaverdo/radish/log"
 	"github.com/mshaverdo/radish/message"
+	"io"
+	"os"
+	"path"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"sync"
 	"time"
 )
 
@@ -75,26 +85,77 @@ type Core interface {
 
 	// Persist Removes the existing timeout on key.
 	Persist(key string) (result int)
+
+	// RestoreData restores data from file.
+	LoadData(src io.Reader) (messageId int64, err error)
+
+	// DumpData dumps storage data to specified file.
+	// It is NOT thread-safe
+	DumpData(dst io.Writer, messageId int64) error
 }
 
-type Controller struct {
-	host string
-	port int
-	srv  ApiServer
-	core Core
+type SyncPolicy int
 
-	stopChan               chan struct{}
+const (
+	// SyncNever means newer do walFile.Sync()
+	SyncNever SyncPolicy = iota
+
+	// SyncNever means walFile.Sync() every second
+	SyncSometimes
+
+	// SyncNever means walFile.Sync() every message write
+	SyncAlways
+)
+
+const (
+	walFileName     = "wal_%v.gob"
+	storageFileName = "storage.gob"
+)
+
+var (
+	ErrServerShutdown = errors.New("server shutdown")
+)
+
+type Controller struct {
+	host                   string
+	port                   int
+	dataDir                string
+	isMemOnly              bool //if true, don't use any i/o disc operations
 	collectExpiredInterval time.Duration
+	takeSnapshotInterval   time.Duration
+	syncPolicy             SyncPolicy
+
+	srv      ApiServer
+	core     Core
+	stopChan chan struct{}
+
+	walMutex   sync.Mutex
+	messageId  int64
+	walFile    *os.File
+	walEncoder *gob.Encoder
+	lastSync   time.Time
+
+	// wg to wait for service storage-updating goroutines (CollectExpired(), etc)
+	serviceWg sync.WaitGroup
+	// wg to wait for request handlers
+	handlerWg sync.WaitGroup
+
+	isRunningMutex sync.Mutex
+	isRunningFlag  bool
 }
 
 // New Constructs new instance of Controller
-func New(host string, port int) *Controller {
+func New(host string, port int, dataDir string) *Controller {
 	c := Controller{
 		host:                   host,
 		port:                   port,
 		core:                   core.NewCore(core.NewHashEngine()),
-		stopChan:               make(chan struct{}),
+		stopChan:               nil, //initially chan is nil, means "not started"
 		collectExpiredInterval: 60 * time.Second,
+		takeSnapshotInterval:   60 * time.Second,
+		dataDir:                dataDir,
+		isMemOnly:              dataDir == "",
+		syncPolicy:             SyncSometimes,
 	}
 	c.srv = httpserver.New(host, port, &c)
 
@@ -103,6 +164,22 @@ func New(host string, port int) *Controller {
 
 // ListenAndServe starts a new radish server
 func (c *Controller) ListenAndServe() error {
+	//TODO: реализовать периодический мерж лога в дмап базы
+	//TODO: оставить возможность переключиться на fork(). в форке попробовать реализовать сериализацию через C protobuf
+	if !c.isMemOnly {
+		err := c.restoreState()
+		if err != nil {
+			return err
+		}
+
+		_, err = c.startNewWal()
+		if err != nil {
+			return err
+		}
+	}
+
+	c.stopChan = make(chan struct{})
+
 	go c.runCollector()
 	log.Infof("Radish ready to serve at %s:%d", c.host, c.port)
 	return c.srv.ListenAndServe()
@@ -110,6 +187,9 @@ func (c *Controller) ListenAndServe() error {
 
 // Shutdown gracefully shuts server down
 func (c *Controller) Shutdown() {
+	//TODO: implement dump state to disc on shutdown
+	//TODO: implement closing walFile on stop and delete it after dumping data to snapshot
+	//TODO: реализовать остановку обработки запросов, чтобы получить engine в монопольное владение для последующего дампа
 	log.Info("Shutting down Radish...")
 	close(c.stopChan)
 	c.srv.Shutdown()
@@ -118,10 +198,240 @@ func (c *Controller) Shutdown() {
 
 // HandleMessage processes Request and return Response
 func (c *Controller) HandleMessage(request *message.Request) *message.Response {
-	return c.processCommand(request)
+	if !c.isRunning() {
+		getResponseCommandError(request.Cmd, ErrServerShutdown)
+	}
+
+	response := c.processCommand(request)
+
+	if response.Status != message.StatusOk {
+		// we don't add any failed requests to WAL: they are not changed any data
+		return response
+	}
+
+	if c.isMemOnly {
+		// all done with this request
+		return response
+	}
+
+	//TODO: use go generate
+	switch request.Cmd {
+	case "SET", "SETEX", "DEL", "DSET", "DDEL", "LSET", "LPUSH", "LPOP", "EXPIRE", "PERSIST":
+		if err := c.writeToLog(request); err != nil {
+			return getResponseCommandError(request.Cmd, err)
+		}
+	}
+
+	return response
 }
 
-// runCollector runs Core.CollectExpired() periodically
+func (c *Controller) writeToLog(request *message.Request) error {
+	c.walMutex.Lock()
+	defer c.walMutex.Unlock()
+
+	c.messageId++
+	request.Id = c.messageId
+	err := c.walEncoder.Encode(request)
+
+	if c.syncPolicy == SyncAlways || c.syncPolicy == SyncSometimes && time.Since(c.lastSync) > 1*time.Second {
+		c.walFile.Sync()
+		c.lastSync = time.Now()
+	}
+
+	return err
+}
+
+func (c *Controller) restoreState() error {
+	if c.isRunning() {
+		panic("Program logic error: trying to restoreState() on running controller")
+	}
+	if c.isMemOnly {
+		panic("Program logic error: trying to restoreState() in MemOnly mode")
+	}
+	if err := c.loadStorage(); err != nil {
+		return err
+	}
+	processedWals, err := c.processAllWals()
+	if err != nil {
+		return err
+	}
+	// dump storage with merged WALs to disk
+	if err := c.dumpStorage(); err != nil {
+		return err
+	}
+
+	// all OK, remove processed WALs
+	for _, v := range processedWals {
+		err := os.Remove(v)
+		if err != nil {
+			log.Warningf("Unable to remove processed WAL %s: %s", v, err)
+		}
+	}
+
+	return nil
+}
+
+func (c *Controller) loadStorage() error {
+	if c.isRunning() {
+		panic("Program logic error: trying to load storage on running controller")
+	}
+	if c.isMemOnly {
+		panic("Program logic error: trying to load storage in MemOnly mode")
+	}
+
+	filename := path.Join(c.dataDir, storageFileName)
+	file, err := os.Open(filename)
+	if os.IsNotExist(err) {
+		// no data file found, just skip
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("Controller.loadStorage(). Unable to open %s: %s", filename, err)
+	}
+	defer file.Close()
+
+	log.Infof("Loading storage data from %s...", filename)
+	//restore commandID from the Storage file
+	c.messageId, err = c.core.LoadData(file)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Controller) processAllWals() (processedWals []string, err error) {
+	if c.isRunning() {
+		panic("Program logic error: trying to processAllWals() on running controller")
+	}
+	if c.isMemOnly {
+		panic("Program logic error: trying to processAllWals() in MemOnly mode")
+	}
+
+	allFiles, err := filepath.Glob(c.walFileName("*"))
+	if err != nil {
+		return nil, fmt.Errorf("Controller.processAllWals(): %s", err)
+	}
+
+	var messageIds []int
+	for _, v := range allFiles {
+		id := 0
+		fmt.Sscanf(v, c.walFileName("%d"), &id)
+		if id > 0 {
+			messageIds = append(messageIds, id)
+		}
+	}
+
+	sort.Ints(messageIds)
+
+	// process all WALs from earliest to latest
+	for _, messageId := range messageIds {
+		filename := c.walFileName(messageId)
+		if err := c.processWal(filename); err != nil {
+			return nil, err
+		}
+		processedWals = append(processedWals, filename)
+	}
+
+	return processedWals, nil
+}
+
+func (c *Controller) processWal(filename string) error {
+	if c.isRunning() {
+		panic("Program logic error: trying to load storage on running controller")
+	}
+	if c.isMemOnly {
+		panic("Program logic error: trying to load storage in MemOnly mode")
+	}
+
+	log.Infof("processing WAL %s...", filename)
+
+	file, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	dec := gob.NewDecoder(file)
+	req := new(message.Request)
+	for err := dec.Decode(req); err != io.EOF; err = dec.Decode(req) {
+		if err != nil {
+			return fmt.Errorf("Controller.processWal(): can't process %s: %s", filename, err)
+		}
+
+		if req.Id <= c.messageId {
+			// skip messages, that already in the storage
+			continue
+		}
+
+		err = fixWalRequestTtl(req)
+		if err != nil {
+			return fmt.Errorf("Controller.processWal(): can't process %s: %s \nrequest: %s", filename, err, req)
+		}
+
+		resp := c.processCommand(req)
+		if resp.Status != message.StatusOk {
+			// we got an error, but this request was successful. Something went wrong
+			return fmt.Errorf("Controller.processWal(): can't process %s: \nrequest: %s \nresponse: %s", filename, req, resp)
+		}
+
+		c.messageId = req.Id
+		req = new(message.Request)
+	}
+
+	return nil
+}
+
+func (c *Controller) dumpStorage() error {
+	if c.isRunning() {
+		panic("Program logic error: trying to dumpStorage() on running controller")
+	}
+	if c.isMemOnly {
+		panic("Program logic error: trying to dumpStorage() in MemOnly mode")
+	}
+
+	//remove expired items to decrease dump size
+	c.core.CollectExpired()
+
+	file, err := os.Create(c.storageFileName())
+	if err != nil {
+		return err
+	}
+
+	//save commandID to beginning of Storage file
+	return c.core.DumpData(file, c.messageId)
+}
+
+func (c *Controller) startNewWal() (oldWalFilename string, err error) {
+	c.walMutex.Lock()
+	defer c.walMutex.Unlock()
+
+	c.messageId++
+	filename := c.walFileName(c.messageId)
+
+	if _, err := os.Stat(filename); !os.IsNotExist(err) {
+		err = fmt.Errorf("trying to write WAL to existing file: %s", filename)
+		log.Error(err.Error())
+		return "", err
+	}
+
+	file, err := os.Create(filename)
+	if err != nil {
+		err = fmt.Errorf("error creating WAL file %s: %s", filename, err.Error())
+		log.Error(err.Error())
+		return "", err
+	}
+
+	if c.walFile != nil {
+		oldWalFilename = c.walFile.Name()
+		c.walFile.Close()
+	}
+
+	c.walFile = file
+	c.walEncoder = gob.NewEncoder(c.walFile)
+
+	return oldWalFilename, nil
+}
+
 func (c *Controller) runCollector() {
 	tick := time.Tick(c.collectExpiredInterval)
 	for {
@@ -135,8 +445,23 @@ func (c *Controller) runCollector() {
 	}
 }
 
+func (c *Controller) isRunning() bool {
+	c.isRunningMutex.Lock()
+	defer c.isRunningMutex.Unlock()
+	return c.isRunningFlag
+}
+
+func (c *Controller) walFileName(messageId interface{}) string {
+	return path.Join(c.dataDir, fmt.Sprintf(walFileName, messageId))
+}
+
+func (c *Controller) storageFileName() string {
+	return path.Join(c.dataDir, storageFileName)
+}
+
 func (c *Controller) processCommand(r *message.Request) *message.Response {
 	//TODO: use go generate!
+	//TODO: move Cmd strings to constants!
 	switch r.Cmd {
 	case "KEYS":
 		arg0, err := r.GetArgumentString(0)
@@ -395,4 +720,21 @@ func (c *Controller) processCommand(r *message.Request) *message.Response {
 			[]byte("Unknown command: "+r.Cmd),
 		)
 	}
+}
+
+// Correct TTL value for TTL-related requests due to ttl is time.Now() -related value
+func fixWalRequestTtl(request *message.Request) error {
+	//TODO: use go generate
+	switch request.Cmd {
+	case "SETEX", "EXPIRE":
+		seconds, err := request.GetArgumentInt(1)
+		if err != nil {
+			return err
+		}
+
+		seconds -= int(time.Since(request.Time).Seconds())
+		request.Args[1] = strconv.Itoa(seconds)
+	}
+
+	return nil
 }

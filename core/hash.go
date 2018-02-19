@@ -8,7 +8,7 @@ import (
 
 // register HashEngine as Engine implementation for GOB
 func init() {
-	gob.Register(HashEngine{})
+	gob.Register(&HashEngine{})
 }
 
 //For in-memory storage (not on disc) hashmap should be faster thar b-tree

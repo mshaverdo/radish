@@ -27,7 +27,7 @@ type TestCase struct {
 func TestClient(t *testing.T) {
 	//*
 	log.SetLevel(log.CRITICAL)
-	go controller.New("", 6381).ListenAndServe()
+	go controller.New("", 6381, "").ListenAndServe()
 	time.Sleep(500 * time.Millisecond) // wait to ensure, that controller started
 
 	cl := NewClient("localhost", 6381)

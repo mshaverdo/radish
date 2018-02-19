@@ -4,10 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 )
 
 // Request is a container, represents a Command, parsed from external API interface
 type Request struct {
+	//Time is a message creation time
+	Time time.Time
+	//Unique, monotony growing request ID, initialized on writing to WAL
+	Id int64
 	// Cmd is a Command type
 	Cmd string
 	// Args is a list of command positional args
@@ -22,12 +27,12 @@ type Request struct {
 
 // NewRequestSingle constructs new Request object with single payload
 func NewRequestSingle(cmd string, args []string, meta map[string]string, payload []byte) *Request {
-	return &Request{Cmd: cmd, Args: args, Meta: meta, Payload: payload}
+	return &Request{Time: time.Now(), Cmd: cmd, Args: args, Meta: meta, Payload: payload}
 }
 
 // NewRequestMulti constructs new Request object with multi payloads
 func NewRequestMulti(cmd string, args []string, meta map[string]string, multiPayloads [][]byte) *Request {
-	return &Request{Cmd: cmd, Args: args, Meta: meta, MultiPayloads: multiPayloads}
+	return &Request{Time: time.Now(), Cmd: cmd, Args: args, Meta: meta, MultiPayloads: multiPayloads}
 }
 
 // GetArgumentInt returns int argument by index i. Return error if unable to parse int, or requested index too big
