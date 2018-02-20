@@ -159,7 +159,7 @@ func (c *Controller) ListenAndServe() error {
 	c.serviceWg.Add(1)
 	go c.runCollector()
 
-	log.Infof("Radish ready to serve at %s:%d", c.host, c.port)
+	log.Notice("Radish ready to serve at %s:%d", c.host, c.port)
 	return c.srv.ListenAndServe()
 }
 
@@ -169,7 +169,7 @@ func (c *Controller) Shutdown() {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	log.Info("Shutting down Radish...")
+	log.Notice("Shutting down Radish...")
 	c.stop()
 	c.srv.Stop()
 
@@ -185,7 +185,7 @@ func (c *Controller) Shutdown() {
 	}
 
 	c.srv.Shutdown()
-	log.Infof("Goodbye!")
+	log.Notice("Goodbye!")
 }
 
 // HandleMessage processes Request and return Response

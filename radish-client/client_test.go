@@ -11,6 +11,7 @@ import (
 	"time"
 )
 
+//TODO: clean & refactor!
 var _ = redis.Nil
 var _ = controller.Controller{}
 var _ = log.CRITICAL

@@ -90,13 +90,13 @@ func (s *HttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else if err == nil {
 		request, err = parseMultiPayload(r, mr)
 	} else {
-		log.Notice("Error during processing request: %s", err.Error())
+		log.Debugf("Error during processing request: %s", err.Error())
 		http.Error(w, "Error during processing request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	if err != nil {
-		log.Notice("Error during processing request: %s", err.Error())
+		log.Debugf("Error during processing request: %s", err.Error())
 		http.Error(w, "Error during processing request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -127,21 +127,21 @@ func sendMultipartResponse(w http.ResponseWriter, response *message.Response) {
 		mh.Set("Content-Type", "text/plain")
 		partWriter, err := writer.CreatePart(mh)
 		if err != nil {
-			log.Errorf("Error writing multipart response: %s", err.Error())
+			log.Debugf("Error writing multipart response: %s", err.Error())
 			http.Error(w, "Error during processing request: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		_, err = partWriter.Write(val)
 		if err != nil {
-			log.Errorf("Error writing multipart response: %s", err.Error())
+			log.Debugf("Error writing multipart response: %s", err.Error())
 			http.Error(w, "Error during processing request: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
 	err := writer.Close()
 	if err != nil {
-		log.Errorf("Error writing multipart response: %s", err.Error())
+		log.Debugf("Error writing multipart response: %s", err.Error())
 		http.Error(w, "Error during processing request: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -213,7 +213,7 @@ func parseMultiPayload(r *http.Request, mr *multipart.Reader) (req *message.Requ
 		payload, err := ioutil.ReadAll(p)
 
 		if err != nil {
-			log.Errorf("Error reading part: %s...", err.Error())
+			log.Debugf("Error reading part: %s...", err.Error())
 			return nil, err
 		}
 

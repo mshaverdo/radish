@@ -303,14 +303,14 @@ func (k *Keeper) startNewWal() (oldWalFilename, newWalFilename string, err error
 
 	if _, err := os.Stat(filename); !os.IsNotExist(err) {
 		err = fmt.Errorf("Keeper.startNewWal(): trying to write WAL to existing file: %s", filename)
-		log.Error(err.Error())
+		log.Warning(err.Error())
 		return "", "", err
 	}
 
 	file, err := os.Create(filename)
 	if err != nil {
 		err = fmt.Errorf("Keeper.startNewWal(): error creating WAL file %s: %s", filename, err.Error())
-		log.Error(err.Error())
+		log.Warning(err.Error())
 		return "", "", err
 	}
 
@@ -355,7 +355,7 @@ func (k *Keeper) runSnapshotUpdater() {
 
 // updateSnapshot starts new WAL and processes old WALs into existing storage snapshot
 func (k *Keeper) updateSnapshot() error {
-	log.Notice("Updating a snapshot")
+	log.Info("Updating a snapshot")
 	_, newWal, err := k.startNewWal()
 	if err != nil {
 		return err
