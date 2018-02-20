@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/mshaverdo/radish/message"
+	"io"
 	"io/ioutil"
 	"net/http"
 	netUrl "net/url"
@@ -261,8 +262,8 @@ func (c *Client) requestMultiSingle(url string, multiPayloads [][]byte) (result 
 	return parseResponseSingle(response)
 }
 
-func (c *Client) doRequest(request *http.Request) (response *http.Response, err error) {
-	response, err = c.httpClient.Do(request)
+func (c *Client) doRequest(request *http.Request) (*http.Response, error) {
+	response, err := c.httpClient.Do(request)
 	if err != nil {
 		return nil, err
 	}
@@ -270,6 +271,12 @@ func (c *Client) doRequest(request *http.Request) (response *http.Response, err 
 	if response.StatusCode == http.StatusOK {
 		return response, nil
 	}
+
+	defer func() {
+		// it isn't enough just to close body
+		io.Copy(ioutil.Discard, response.Body)
+		response.Body.Close()
+	}()
 
 	// Something wrong happens
 	errorStatus := response.Header.Get(statusHeader)
