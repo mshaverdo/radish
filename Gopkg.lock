@@ -21,6 +21,12 @@
   version = "v1.0.1"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/mshaverdo/assert"
+  packages = ["."]
+  revision = "13c6a438915794bc2ecb7c6fd68818e9938e562a"
+
+[[projects]]
   name = "github.com/op/go-logging"
   packages = ["."]
   revision = "b2cb9fa56473e98db8caba80237377e83fe44db5"
@@ -35,6 +41,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "6c52f4a62952e893f5dd6810a3ee2c7e708b0471d59cbde740f89a2e50728968"
+  inputs-digest = "d422aaa95b1f8d2cb38f54e1182b4cb72e0cc33e5d4fcacad5cfda5b7413823e"
   solver-name = "gps-cdcl"
   solver-version = 1

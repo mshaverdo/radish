@@ -3,6 +3,7 @@ package core
 import (
 	"bytes"
 	"encoding/gob"
+	"github.com/mshaverdo/assert"
 	"sync"
 )
 
@@ -65,9 +66,7 @@ func (e *HashEngine) AddOrReplace(items map[string]*Item) {
 	defer e.mu.Unlock()
 
 	for k, item := range items {
-		if item == nil {
-			panic("Program Logic error: trying to add nil *Item into Engine")
-		}
+		assert.True(item != nil, "trying to add nil *Item into Engine")
 		e.data[k] = item
 	}
 }

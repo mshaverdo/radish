@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"github.com/mshaverdo/assert"
 	"github.com/mshaverdo/radish/core"
 	"github.com/mshaverdo/radish/message"
 	"strconv"
@@ -21,9 +22,7 @@ func getResponseCommandError(cmd string, err error) *message.Response {
 	}
 
 	status, ok := statusMap[err]
-	if !ok {
-		panic("Program logic error: unknown error: " + err.Error())
-	}
+	assert.True(ok, "unknown error: "+err.Error())
 
 	return message.NewResponseSingle(
 		status,

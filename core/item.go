@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"github.com/mshaverdo/assert"
 	"sort"
 	"sync"
 	"time"
@@ -66,44 +67,32 @@ func (i *Item) Kind() ItemKind {
 }
 
 func (i *Item) Bytes() []byte {
-	if i.kind != Bytes {
-		panic("Program Logic error: trying to get Bytes value on " + i.kind.String())
-	}
+	assert.True(i.kind == Bytes, "trying to get Bytes value on "+i.kind.String())
 	return i.bytes
 }
 
 func (i *Item) SetBytes(v []byte) {
-	if i.kind != Bytes {
-		panic("Program Logic error: trying to get Bytes value on " + i.kind.String())
-	}
+	assert.True(i.kind == Bytes, "trying to set Bytes value on "+i.kind.String())
 	i.bytes = v
 }
 
 func (i *Item) List() [][]byte {
-	if i.kind != List {
-		panic("Program Logic error: trying to get List value on " + i.kind.String())
-	}
+	assert.True(i.kind == List, "trying to get List value on "+i.kind.String())
 	return i.list
 }
 
 func (i *Item) SetList(v [][]byte) {
-	if i.kind != List {
-		panic("Program Logic error: trying to get List value on " + i.kind.String())
-	}
+	assert.True(i.kind == List, "trying to set List value on "+i.kind.String())
 	i.list = v
 }
 
 func (i *Item) Dict() map[string][]byte {
-	if i.kind != Dict {
-		panic("Program Logic error: trying to get Dict value on " + i.kind.String())
-	}
+	assert.True(i.kind == Dict, "trying to get Dict value on "+i.kind.String())
 	return i.dict
 }
 
 func (i *Item) SetDict(v map[string][]byte) {
-	if i.kind != Dict {
-		panic("Program Logic error: trying to get Dict value on " + i.kind.String())
-	}
+	assert.True(i.kind == Dict, "trying to set Dict value on "+i.kind.String())
 	i.dict = v
 }
 
@@ -129,23 +118,18 @@ func (i *Item) String() string {
 
 		return result
 	default:
-		panic("Program Logic error: unknown Item.kind: " + i.kind.String())
+		assert.True(false, "unknown Item.kind: "+i.kind.String())
+		return ""
 	}
 }
 
 func (i *Item) SetTtl(seconds int) {
-	if seconds <= 0 {
-		panic("Program Logic error: Trying to set non-positive TTL. To reset TTL use Item.RemoveTtl()")
-	}
-
+	assert.True(seconds > 0, "Trying to set non-positive TTL. To reset TTL use Item.RemoveTtl()")
 	i.expireAt = time.Now().Add(time.Duration(seconds) * time.Second)
 }
 
 func (i *Item) SetMilliTtl(milliseconds int) {
-	if milliseconds <= 0 {
-		panic("Program Logic error: Trying to set non-positive TTL. To reset TTL use Item.RemoveTtl()")
-	}
-
+	assert.True(milliseconds > 0, "Trying to set non-positive TTL. To reset TTL use Item.RemoveTtl()")
 	i.expireAt = time.Now().Add(time.Duration(milliseconds) * time.Millisecond)
 }
 

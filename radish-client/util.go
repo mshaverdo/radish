@@ -5,6 +5,7 @@ import (
 	"encoding"
 	"errors"
 	"fmt"
+	"github.com/mshaverdo/assert"
 	"io/ioutil"
 	"mime"
 	"mime/multipart"
@@ -16,9 +17,7 @@ import (
 func getRequestSingle(usePost bool, url string, payload []byte) (*http.Request, error) {
 	method := map[bool]string{true: "POST", false: "GET"}[usePost]
 
-	if !usePost && payload != nil {
-		panic("Program logic error: POST must be used for non-nil payload requests")
-	}
+	assert.False(!usePost && payload != nil, "POST must be used for non-nil payload requests")
 
 	return http.NewRequest(method, url, bytes.NewReader(payload))
 }

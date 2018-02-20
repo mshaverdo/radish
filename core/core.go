@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"github.com/mshaverdo/assert"
 	"github.com/ryanuber/go-glob"
 	"math"
 )
@@ -148,9 +149,7 @@ func (c *Core) Get(key string) (result []byte, err error) {
 // If key already holds a value, it is overwritten, regardless of its type.
 // Any previous time to live associated with the key is discarded on successful SET operation.
 func (c *Core) Set(key string, value []byte) {
-	if value == nil {
-		panic("Program Logic error: trying to to insert nil value into the core")
-	}
+	assert.True(value != nil, "trying to to insert nil value into the core")
 	c.engine.AddOrReplace(map[string]*Item{key: NewItemBytes(value)})
 }
 
@@ -158,9 +157,7 @@ func (c *Core) Set(key string, value []byte) {
 // If key already holds a value, it is overwritten, regardless of its type.
 // ttl <= 0 leads to deleting record
 func (c *Core) SetEx(key string, seconds int, value []byte) {
-	if value == nil {
-		panic("Program Logic error: trying to to insert nil value into the core")
-	}
+	assert.True(value != nil, "trying to to insert nil value into the core")
 
 	if seconds <= 0 {
 		//item expired before set, just remove it
@@ -187,9 +184,7 @@ func (c *Core) Del(keys []string) (count int) {
 // returns 1 if f field is a new field in the hash and value was set.
 // returns 0 if field already exists in the hash and the value was updated.
 func (c *Core) DSet(key, field string, value []byte) (count int, err error) {
-	if value == nil {
-		panic("Program Logic error: trying to to insert nil value into the core")
-	}
+	assert.True(value != nil, "trying to to insert nil value into the core")
 
 	item := c.getItem(key)
 	if item == nil {
@@ -457,9 +452,7 @@ func (c *Core) LIndex(key string, index int) (result []byte, err error) {
 // Here, -1 means the last element, -2 means the penultimate and so forth.
 // An error is returned for out of range indexes.
 func (c *Core) LSet(key string, index int, value []byte) (err error) {
-	if value == nil {
-		panic("Program Logic error: trying to to insert nil value into the core")
-	}
+	assert.True(value != nil, "trying to to insert nil value into the core")
 
 	item := c.getItem(key)
 	if item == nil {
@@ -519,9 +512,7 @@ func (c *Core) LPush(key string, values [][]byte) (count int, err error) {
 	list := item.List()
 
 	for _, v := range values {
-		if v == nil {
-			panic("Program Logic error: trying to to insert nil value into the core")
-		}
+		assert.True(v != nil, "trying to to insert nil value into the core")
 	}
 
 	list = append(list, values...)

@@ -3,6 +3,7 @@ package controller
 import (
 	"encoding/gob"
 	"fmt"
+	"github.com/mshaverdo/assert"
 	"github.com/mshaverdo/radish/core"
 	"github.com/mshaverdo/radish/log"
 	"github.com/mshaverdo/radish/message"
@@ -256,9 +257,7 @@ func (k *Keeper) persistStorage() error {
 
 // Shutdown shuts Keeper down and persists storage
 func (k *Keeper) Shutdown() error {
-	if !k.isRunning() {
-		panic("Program logic error: Tying to shut down not running Keeper")
-	}
+	assert.True(k.isRunning(), "Tying to shut down not running Keeper")
 
 	// wait for background updater finishes
 	close(k.stopChan)
@@ -279,9 +278,7 @@ func (k *Keeper) Shutdown() error {
 
 // Start restores storage state and starts new WAL
 func (k *Keeper) Start() (err error) {
-	if k.isRunning() {
-		panic("Program logic error: Tying to start already running Keeper")
-	}
+	assert.True(!k.isRunning(), "Tying to start already running Keeper")
 
 	err = k.restoreStorageState()
 	if err != nil {
@@ -376,9 +373,7 @@ func (k *Keeper) updateSnapshot() error {
 			processingWals = append(processingWals, v)
 		}
 	}
-	if len(allWals) == len(processingWals) {
-		panic("Program logic error: new WAL must be in datadir: " + k.dataDir + " " + newWal)
-	}
+	assert.True(len(allWals) != len(processingWals), "new WAL must be in datadir: "+k.dataDir+" "+newWal)
 
 	snapshotKeeper := NewKeeper(
 		core.New(core.NewHashEngine()),
