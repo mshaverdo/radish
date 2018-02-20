@@ -1,11 +1,8 @@
 package core
 
 import (
-	"encoding/gob"
 	"errors"
-	"fmt"
 	"github.com/ryanuber/go-glob"
-	"io"
 	"math"
 )
 
@@ -625,6 +622,18 @@ func (c *Core) Persist(key string) (result int) {
 	return 1
 }
 
+// Engine returns reference to underlying engine to persisting
+// Except Engine, Core is stateless by design, so it's enough to persist Engine to save all Core state
+func (c *Core) Engine() Engine {
+	return c.engine
+}
+
+// SetEngine sets storage engine after loading
+// Except Engine, Core is stateless by design, so it's enough to persist Engine to save all Core state
+func (c *Core) SetEngine(engine Engine) {
+	c.engine = engine
+}
+
 // warning: it could affect performance due to extra mutex lock.
 // if it makes perf. penalty, move  IsExpired() check inside existing Lock() in every API func
 func (c *Core) getItem(key string) *Item {
@@ -641,43 +650,4 @@ func (c *Core) getItem(key string) *Item {
 	}
 
 	return item
-}
-
-type storageData struct {
-	ID int64
-	E  Engine
-}
-
-// DumpData dumps storage data to specified file.
-// It is NOT thread-safe
-// store messageId along with data dump
-func (c *Core) DumpData(dst io.Writer, messageId int64) error {
-	//TODO: слишком большой gob-файл. дублируются поля. вероятно, из-за того, что в Item сделаа сериализация отдельно
-	data := storageData{
-		ID: messageId,
-		E:  c.engine,
-	}
-
-	enc := gob.NewEncoder(dst)
-	err := enc.Encode(data)
-	if err != nil {
-		return fmt.Errorf("Core.DumpData(): Unable to encode c.engine: %s", err)
-	}
-
-	return nil
-}
-
-// RestoreData restores data from file and returns dump message ID
-func (c *Core) LoadData(src io.Reader) (messageId int64, err error) {
-	data := storageData{}
-
-	dec := gob.NewDecoder(src)
-	err = dec.Decode(&data)
-	if err != nil {
-		return 0, fmt.Errorf("Core.LoadData(): Unable to decode stream: %s", err)
-	}
-
-	c.engine = data.E
-
-	return data.ID, nil
 }

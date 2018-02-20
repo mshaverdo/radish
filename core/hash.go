@@ -105,15 +105,29 @@ func (e *HashEngine) DelSubmap(submap map[string]*Item) (count int) {
 	return count
 }
 
+type gobExportHashEngine struct {
+	Data map[string]*Item
+}
+
 func (e *HashEngine) GobEncode() ([]byte, error) {
+	export := gobExportHashEngine{Data: e.data}
+
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
-	err := enc.Encode(&e.data)
+	err := enc.Encode(&export)
 
 	return buf.Bytes(), err
 }
 
 func (e *HashEngine) GobDecode(gobData []byte) error {
+	export := gobExportHashEngine{Data: e.data}
+
 	dec := gob.NewDecoder(bytes.NewReader(gobData))
-	return dec.Decode(&e.data)
+	if err := dec.Decode(&export); err != nil {
+		return err
+	}
+
+	e.data = export.Data
+
+	return nil
 }

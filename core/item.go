@@ -171,7 +171,7 @@ func (i *Item) HasTtl() bool {
 }
 
 //TODO: maybe, it's a good idea to add Version field?
-type gobItemExport struct {
+type gobExportItem struct {
 	ExpireAt time.Time
 
 	Kind  ItemKind
@@ -181,7 +181,7 @@ type gobItemExport struct {
 }
 
 func (i *Item) GobEncode() ([]byte, error) {
-	data := gobItemExport{
+	data := gobExportItem{
 		ExpireAt: i.expireAt,
 
 		Kind:  i.kind,
@@ -198,7 +198,7 @@ func (i *Item) GobEncode() ([]byte, error) {
 }
 
 func (i *Item) GobDecode(gobData []byte) error {
-	data := gobItemExport{}
+	data := gobExportItem{}
 
 	dec := gob.NewDecoder(bytes.NewReader(gobData))
 	err := dec.Decode(&data)
