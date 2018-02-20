@@ -11,6 +11,7 @@ import (
 
 func main() {
 	//TODO: сделать (найти) паект assert с ссответствующими функциями и использовать его вместо if... panic
+	//TODO: посмотреть, чтобы возвращались более информативные ошибки. посмотреть best prectices
 	var (
 		host, dataDir               string
 		port                        int

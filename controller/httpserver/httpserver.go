@@ -25,6 +25,7 @@ const (
 type HttpServer struct {
 	http.Server
 	messageHandler MessageHandler
+	stopChan       chan struct{}
 }
 
 // MessageHandler processes a Request message and return a response message
@@ -40,6 +41,7 @@ func New(host string, port int, messageHandler MessageHandler) *HttpServer {
 	s := HttpServer{
 		Server:         http.Server{Addr: addr},
 		messageHandler: messageHandler,
+		stopChan:       make(chan struct{}),
 	}
 
 	serverMux := http.NewServeMux()
@@ -52,15 +54,22 @@ func New(host string, port int, messageHandler MessageHandler) *HttpServer {
 // ListenAndServe statrs listening to incoming connections
 func (s *HttpServer) ListenAndServe() error {
 	if err := s.Server.ListenAndServe(); err == http.ErrServerClosed {
+		<-s.stopChan // wait for full shutdown
 		return nil
 	} else {
 		return err
 	}
 }
 
+// Stops accepting new requests by HTTP server, but not causes return from ListenAndServe() until Shutdown()
+func (s *HttpServer) Stop() error {
+	return s.Server.Shutdown(context.TODO())
+}
+
 // Shutdown gracefully shuts server down
 func (s *HttpServer) Shutdown() error {
-	return s.Server.Shutdown(context.TODO())
+	defer close(s.stopChan)
+	return s.Stop()
 }
 
 // ServeHTTP handles all requests to Http API.

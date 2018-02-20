@@ -9,6 +9,7 @@ import (
 	"github.com/mshaverdo/radish/log"
 	"github.com/mshaverdo/radish/message"
 	"io"
+	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -22,6 +23,7 @@ import (
 type ApiServer interface {
 	ListenAndServe() error
 	Shutdown() error
+	Stop() error
 }
 
 // Core provides domain operations on the storage -- Get, Set, Keys, etc.
@@ -125,9 +127,8 @@ type Controller struct {
 	takeSnapshotInterval   time.Duration
 	syncPolicy             SyncPolicy
 
-	srv      ApiServer
-	core     Core
-	stopChan chan struct{}
+	srv  ApiServer
+	core Core
 
 	walMutex   sync.Mutex
 	messageId  int64
@@ -142,6 +143,7 @@ type Controller struct {
 
 	isRunningMutex sync.Mutex
 	isRunningFlag  bool
+	stopChan       chan struct{}
 }
 
 // New Constructs new instance of Controller
@@ -150,7 +152,7 @@ func New(host string, port int, dataDir string) *Controller {
 		host:                   host,
 		port:                   port,
 		core:                   core.NewCore(core.NewHashEngine()),
-		stopChan:               nil, //initially chan is nil, means "not started"
+		stopChan:               make(chan struct{}),
 		collectExpiredInterval: 60 * time.Second,
 		takeSnapshotInterval:   60 * time.Second,
 		dataDir:                dataDir,
@@ -178,29 +180,47 @@ func (c *Controller) ListenAndServe() error {
 		}
 	}
 
-	c.stopChan = make(chan struct{})
+	c.start()
 
+	// Don't forget to add all background service processes to wg!
+	c.serviceWg.Add(1)
 	go c.runCollector()
+
 	log.Infof("Radish ready to serve at %s:%d", c.host, c.port)
 	return c.srv.ListenAndServe()
 }
 
 // Shutdown gracefully shuts server down
 func (c *Controller) Shutdown() {
-	//TODO: implement dump state to disc on shutdown
-	//TODO: implement closing walFile on stop and delete it after dumping data to snapshot
-	//TODO: реализовать остановку обработки запросов, чтобы получить engine в монопольное владение для последующего дампа
 	log.Info("Shutting down Radish...")
-	close(c.stopChan)
+	c.stop()
+	c.srv.Stop()
+
+	//wait other goroutines that may interact with storage
+	c.serviceWg.Wait()
+	c.handlerWg.Wait()
+
+	//OK, no more concurrent threads working with storage
+	if !c.isMemOnly {
+		err := c.shutdownStorage()
+		if err != nil {
+			log.Error(err.Error())
+		}
+	}
+
 	c.srv.Shutdown()
-	log.Info("Goodbye!")
+	log.Infof("Goodbye!")
 }
 
 // HandleMessage processes Request and return Response
 func (c *Controller) HandleMessage(request *message.Request) *message.Response {
 	if !c.isRunning() {
-		getResponseCommandError(request.Cmd, ErrServerShutdown)
+		return getResponseCommandError(request.Cmd, ErrServerShutdown)
 	}
+
+	// It's OK to do wg.Add() inside a goroutine, due to c.stop() invoked BEFORE c.handlerWg.Wait()
+	c.handlerWg.Add(1)
+	defer c.handlerWg.Done()
 
 	response := c.processCommand(request)
 
@@ -392,13 +412,46 @@ func (c *Controller) dumpStorage() error {
 	//remove expired items to decrease dump size
 	c.core.CollectExpired()
 
-	file, err := os.Create(c.storageFileName())
+	file, err := ioutil.TempFile(filepath.Dir(c.storageFileName()), filepath.Base(c.storageFileName()))
+	defer file.Close()
+
+	if err != nil {
+		return fmt.Errorf("Controller.dumpStorage(): %s", err)
+	}
+
+	//save commandID to beginning of Storage file
+	err = c.core.DumpData(file, c.messageId)
+	if err != nil {
+		return fmt.Errorf("Controller.dumpStorage(): %s", err)
+	}
+
+	err = os.Rename(file.Name(), c.storageFileName())
+	if err != nil {
+		return fmt.Errorf("Controller.dumpStorage(): %s", err)
+	}
+
+	return nil
+}
+
+func (c *Controller) shutdownStorage() error {
+	if c.isRunning() {
+		panic("Program logic error: trying to shutdownStorage() on running controller")
+	}
+	if c.isMemOnly {
+		panic("Program logic error: trying to shutdownStorage() in MemOnly mode")
+	}
+
+	log.Infof("Persisting storage...")
+	err := c.dumpStorage()
 	if err != nil {
 		return err
 	}
 
-	//save commandID to beginning of Storage file
-	return c.core.DumpData(file, c.messageId)
+	oldWalFilename := c.walFile.Name()
+	c.walFile.Close()
+	os.Remove(oldWalFilename)
+
+	return nil
 }
 
 func (c *Controller) startNewWal() (oldWalFilename string, err error) {
@@ -433,6 +486,8 @@ func (c *Controller) startNewWal() (oldWalFilename string, err error) {
 }
 
 func (c *Controller) runCollector() {
+	defer c.serviceWg.Done()
+
 	tick := time.Tick(c.collectExpiredInterval)
 	for {
 		select {
@@ -443,6 +498,19 @@ func (c *Controller) runCollector() {
 			log.Debugf("Collected %d expired items", count)
 		}
 	}
+}
+
+func (c *Controller) start() {
+	c.isRunningMutex.Lock()
+	defer c.isRunningMutex.Unlock()
+	c.isRunningFlag = true
+}
+
+func (c *Controller) stop() {
+	c.isRunningMutex.Lock()
+	defer c.isRunningMutex.Unlock()
+	c.isRunningFlag = false
+	close(c.stopChan)
 }
 
 func (c *Controller) isRunning() bool {
