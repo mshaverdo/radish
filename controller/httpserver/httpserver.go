@@ -17,8 +17,7 @@ import (
 )
 
 const (
-	MetaHeaderPrefix = "X-Radish-"
-	StatusHeader     = "X-Radish-Status"
+	StatusHeader = "X-Radish-Status"
 )
 
 // HttpServer is a implementation of HttpServer interface
@@ -78,10 +77,6 @@ func (s *HttpServer) Shutdown() error {
 // receives message.Response, corresponding to sent Request
 // and transorms message.Response into HTTP response
 func (s *HttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	//TODO: use code generation to generate routes for commands, with params count check, POST/GET check
-	//TODO: причесать
-	//TODO: add POST/GET chech for idempotent/non-idempotent operations, or remove POST/GET from README
-	//TODO: check birary files upload/download
 	var (
 		request  *message.Request
 		response *message.Response
@@ -109,48 +104,52 @@ func (s *HttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Debugf("Handling request: %s", request)
 
 	response = s.messageHandler.HandleMessage(request)
-	httpStatus := getResponseHttpStatus(response)
 
 	log.Debugf("Sending response: %s", response)
 
 	if len(response.MultiPayloads) > 0 {
-		body := &bytes.Buffer{}
-		writer := multipart.NewWriter(body)
+		sendMultipartResponse(w, response)
+	} else {
+		httpStatus := getResponseHttpStatus(response)
+		w.Header().Set(StatusHeader, response.Status.String())
+		w.WriteHeader(httpStatus)
+		w.Write(response.Payload)
+	}
+}
 
-		for _, val := range response.MultiPayloads {
-			mh := make(textproto.MIMEHeader)
-			mh.Set("Content-Type", "text/plain")
-			partWriter, err := writer.CreatePart(mh)
-			if err != nil {
-				log.Errorf("Error writing multipart response: %s", err.Error())
-				http.Error(w, "Error during processing request: "+err.Error(), http.StatusInternalServerError)
-				return
-			}
+func sendMultipartResponse(w http.ResponseWriter, response *message.Response) {
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	httpStatus := getResponseHttpStatus(response)
 
-			_, err = partWriter.Write(val)
-			if err != nil {
-				log.Errorf("Error writing multipart response: %s", err.Error())
-				http.Error(w, "Error during processing request: "+err.Error(), http.StatusInternalServerError)
-				return
-			}
-		}
-		err := writer.Close()
+	for _, val := range response.MultiPayloads {
+		mh := make(textproto.MIMEHeader)
+		mh.Set("Content-Type", "text/plain")
+		partWriter, err := writer.CreatePart(mh)
 		if err != nil {
 			log.Errorf("Error writing multipart response: %s", err.Error())
 			http.Error(w, "Error during processing request: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", writer.FormDataContentType())
-		w.Header().Set(StatusHeader, response.Status.String())
-		w.WriteHeader(httpStatus)
-		io.Copy(w, body)
-	} else {
-		w.Header().Set(StatusHeader, response.Status.String())
-		w.WriteHeader(httpStatus)
-		w.Write(response.Payload)
+		_, err = partWriter.Write(val)
+		if err != nil {
+			log.Errorf("Error writing multipart response: %s", err.Error())
+			http.Error(w, "Error during processing request: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	err := writer.Close()
+	if err != nil {
+		log.Errorf("Error writing multipart response: %s", err.Error())
+		http.Error(w, "Error during processing request: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
+	w.Header().Set("Content-Type", writer.FormDataContentType())
+	w.Header().Set(StatusHeader, response.Status.String())
+	w.WriteHeader(httpStatus)
+	io.Copy(w, body)
 }
 
 func getResponseHttpStatus(r *message.Response) int {
@@ -168,19 +167,6 @@ func getResponseHttpStatus(r *message.Response) int {
 	} else {
 		return http.StatusInternalServerError
 	}
-}
-
-//TODO: remove meta functionality
-func parseMeta(r *http.Request) map[string]string {
-	meta := make(map[string]string)
-	for key, values := range r.Header {
-		if strings.HasPrefix(key, MetaHeaderPrefix) {
-			metaKey := strings.Replace(key, MetaHeaderPrefix, "", 1)
-			meta[metaKey] = values[0]
-		}
-	}
-
-	return meta
 }
 
 func getCmdArgs(r *http.Request) (cmd string, args []string, err error) {
@@ -212,7 +198,7 @@ func parseSinglePayload(r *http.Request) (req *message.Request, err error) {
 	}
 	payload, err := ioutil.ReadAll(r.Body)
 
-	return message.NewRequestSingle(cmd, args, parseMeta(r), payload), err
+	return message.NewRequestSingle(cmd, args, payload), err
 }
 
 // parseMultiPayload parses multipart http request and returns message.Request
@@ -234,5 +220,5 @@ func parseMultiPayload(r *http.Request, mr *multipart.Reader) (req *message.Requ
 		multiPayload = append(multiPayload, payload)
 	}
 
-	return message.NewRequestMulti(cmd, args, parseMeta(r), multiPayload), nil
+	return message.NewRequestMulti(cmd, args, multiPayload), nil
 }

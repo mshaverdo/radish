@@ -118,7 +118,7 @@ func TestCore_Keys(t *testing.T) {
 		{"*i*", []string{"dict", "list"}},
 	}
 
-	c := NewCore(NewMockEngine())
+	c := New(NewMockEngine())
 
 	for _, v := range tests {
 		got := c.Keys(v.pattern)
@@ -144,7 +144,7 @@ func TestCore_Get(t *testing.T) {
 		{"dict", ErrWrongType, ""},
 	}
 
-	c := NewCore(NewMockEngine())
+	c := New(NewMockEngine())
 
 	for _, v := range tests {
 		got, err := c.Get(v.key)
@@ -167,7 +167,7 @@ func TestCore_Set(t *testing.T) {
 		{"expired", "not expired"},
 	}
 
-	c := NewCore(NewMockEngine())
+	c := New(NewMockEngine())
 
 	for _, v := range tests {
 		c.Set(v.key, []byte(v.value))
@@ -190,7 +190,7 @@ func TestCore_Del(t *testing.T) {
 		{[]string{"dict", "測", "expired"}, []string{}},
 	}
 
-	c := NewCore(NewMockEngine())
+	c := New(NewMockEngine())
 
 	for _, v := range tests {
 		c.Del(v.keys)
@@ -218,7 +218,7 @@ func TestCore_DGet(t *testing.T) {
 		{"dict", "測試", nil, "別れ、比類のない"},
 	}
 
-	c := NewCore(NewMockEngine())
+	c := New(NewMockEngine())
 
 	for _, v := range tests {
 		got, err := c.DGet(v.key, v.field)
@@ -245,7 +245,7 @@ func TestCore_DKeys(t *testing.T) {
 		{"dict", "*", nil, []string{"banana", "測試"}},
 	}
 
-	c := NewCore(NewMockEngine())
+	c := New(NewMockEngine())
 
 	for _, v := range tests {
 		got, err := c.DKeys(v.key, v.pattern)
@@ -274,7 +274,7 @@ func TestCore_DSet(t *testing.T) {
 		{"dict", "banana", "mango", nil, 0},
 	}
 
-	c := NewCore(NewMockEngine())
+	c := New(NewMockEngine())
 
 	for _, v := range tests {
 		count, err := c.DSet(v.key, v.field, []byte(v.value))
@@ -306,7 +306,7 @@ func TestCore_DGetAll(t *testing.T) {
 		{"dict", map[string]string{"banana": "mama", "測試": "別れ、比類のない"}, nil},
 	}
 
-	c := NewCore(NewMockEngine())
+	c := New(NewMockEngine())
 
 	for _, v := range tests {
 		result, err := c.DGetAll(v.key)
@@ -341,7 +341,7 @@ func TestCore_DDel(t *testing.T) {
 		{"dict", []string{"banana", "nothing"}, nil, []string{"測試"}, 1},
 	}
 
-	c := NewCore(NewMockEngine())
+	c := New(NewMockEngine())
 
 	for _, v := range tests {
 		count, err := c.DDel(v.key, v.fields)
@@ -373,7 +373,7 @@ func TestCore_LLen(t *testing.T) {
 		{"list", nil, 3},
 	}
 
-	c := NewCore(NewMockEngine())
+	c := New(NewMockEngine())
 
 	for _, v := range tests {
 		got, err := c.LLen(v.key)
@@ -411,7 +411,7 @@ func TestCore_LRange(t *testing.T) {
 		{"list", -1, -1, nil, []string{"Abba"}},
 	}
 
-	c := NewCore(NewMockEngine())
+	c := New(NewMockEngine())
 
 	for _, v := range tests {
 		result, err := c.LRange(v.key, v.start, v.stop)
@@ -448,7 +448,7 @@ func TestCore_LIndex(t *testing.T) {
 		{"list", -10, ErrNotFound, ""},
 	}
 
-	c := NewCore(NewMockEngine())
+	c := New(NewMockEngine())
 
 	for _, v := range tests {
 		result, err := c.LIndex(v.key, v.index)
@@ -480,7 +480,7 @@ func TestCore_LSet(t *testing.T) {
 		{"list", -10, ErrInvalidParams, ""},
 	}
 
-	c := NewCore(NewMockEngine())
+	c := New(NewMockEngine())
 
 	for _, v := range tests {
 		err := c.LSet(v.key, v.index, []byte(v.value))
@@ -508,7 +508,7 @@ func TestCore_LPush(t *testing.T) {
 		{"list", nil, []string{"a", "b", "c", "d", "e", "AC/DC"}, []string{"AC/DC", "e", "d", "c", "b", "a", "KMFDM", "Rammstein", "Abba"}},
 	}
 
-	c := NewCore(NewMockEngine())
+	c := New(NewMockEngine())
 
 	for _, v := range tests {
 		values := make([][]byte, len(v.values))
@@ -552,7 +552,7 @@ func TestCore_LPop(t *testing.T) {
 		{"list", ErrNotFound, "", []string{}},
 	}
 
-	c := NewCore(NewMockEngine())
+	c := New(NewMockEngine())
 
 	for _, v := range tests {
 		value, err := c.LPop(v.key)
@@ -619,7 +619,7 @@ func TestCore_concurrency(t *testing.T) {
 	}
 	tests = append(tests, longTest)
 
-	c := NewCore(NewHashEngine())
+	c := New(NewHashEngine())
 
 	stopCollector := make(chan struct{})
 	go coreCollectWorker(c, stopCollector)
@@ -737,7 +737,7 @@ func collectExpiredTestRunner(
 
 	e := NewHashEngine()
 	e.data = data
-	c := NewCore(e)
+	c := New(e)
 	stopCollector := make(chan struct{})
 	wg := sync.WaitGroup{}
 
@@ -850,7 +850,7 @@ func TestCore_SetEx(t *testing.T) {
 	}
 
 	engine := NewMockEngine()
-	c := NewCore(engine)
+	c := New(engine)
 
 	for _, v := range tests {
 		c.SetEx(v.key, v.ttl, []byte(v.value))
@@ -874,7 +874,7 @@ func TestCore_Persist(t *testing.T) {
 	}
 
 	engine := NewMockEngine()
-	c := NewCore(engine)
+	c := New(engine)
 
 	for _, v := range tests {
 		result := c.Persist(v.key)
@@ -900,7 +900,7 @@ func TestCore_Expire(t *testing.T) {
 	}
 
 	engine := NewMockEngine()
-	c := NewCore(engine)
+	c := New(engine)
 
 	for _, v := range tests {
 		result := c.Expire(v.key, v.ttl)
@@ -927,7 +927,7 @@ func TestCore_Ttl(t *testing.T) {
 		{"expired", -2, nil},
 	}
 
-	c := NewCore(NewMockEngine())
+	c := New(NewMockEngine())
 
 	for _, v := range tests {
 		ttl, err := c.Ttl(v.key)

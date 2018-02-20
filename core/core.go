@@ -6,10 +6,7 @@ import (
 	"math"
 )
 
-//TODO: check performance! check Locks waiting!
 //TODO: if Engine.Lock() will be a bottleneck, try to use sharding by engines
-//TODO: make Expire, ttl, persist as in Redis (return int instead an error)
-//TODO: rename core.NewCore to core.New. first, look to effective go for conventoins
 // configuration
 var (
 	// CollectExpiredBatchSize items processed by CollectExpired()  at once, in single mutex lock to reduce mutex lock overhead
@@ -61,8 +58,8 @@ type Core struct {
 	engine Engine
 }
 
-// NewCore constructs new core instance
-func NewCore(engine Engine) *Core {
+// New constructs new core instance
+func New(engine Engine) *Core {
 	return &Core{engine: engine}
 }
 

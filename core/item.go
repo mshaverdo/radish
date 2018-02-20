@@ -170,7 +170,6 @@ func (i *Item) HasTtl() bool {
 	return i.expireAt != time.Time{}
 }
 
-//TODO: maybe, it's a good idea to add Version field?
 type gobExportItem struct {
 	ExpireAt time.Time
 

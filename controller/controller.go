@@ -123,7 +123,7 @@ func New(
 	c := Controller{
 		host:                   host,
 		port:                   port,
-		core:                   core.NewCore(core.NewHashEngine()),
+		core:                   core.New(core.NewHashEngine()),
 		stopChan:               make(chan struct{}),
 		collectExpiredInterval: collectInterval,
 		dataDir:                dataDir,

@@ -7,7 +7,6 @@ import (
 )
 
 //TODO: use go generate!
-//TODO: move Cmd strings to constants!
 
 type Processor struct {
 	core Core

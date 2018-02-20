@@ -381,7 +381,7 @@ func (k *Keeper) updateSnapshot() error {
 	}
 
 	snapshotKeeper := NewKeeper(
-		core.NewCore(core.NewHashEngine()),
+		core.New(core.NewHashEngine()),
 		k.dataDir,
 		SyncNever,
 		0,

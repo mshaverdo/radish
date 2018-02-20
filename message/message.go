@@ -17,8 +17,6 @@ type Request struct {
 	Cmd string
 	// Args is a list of command positional args
 	Args []string
-	// Meta is a dict of named parameters such as TTL
-	Meta map[string]string
 	// Payload carrys value for SET/HSET/etc command
 	Payload []byte
 	// MultiPayloads intended for MSET/HMSET and other bulk commands
@@ -26,13 +24,13 @@ type Request struct {
 }
 
 // NewRequestSingle constructs new Request object with single payload
-func NewRequestSingle(cmd string, args []string, meta map[string]string, payload []byte) *Request {
-	return &Request{Time: time.Now(), Cmd: cmd, Args: args, Meta: meta, Payload: payload}
+func NewRequestSingle(cmd string, args []string, payload []byte) *Request {
+	return &Request{Time: time.Now(), Cmd: cmd, Args: args, Payload: payload}
 }
 
 // NewRequestMulti constructs new Request object with multi payloads
-func NewRequestMulti(cmd string, args []string, meta map[string]string, multiPayloads [][]byte) *Request {
-	return &Request{Time: time.Now(), Cmd: cmd, Args: args, Meta: meta, MultiPayloads: multiPayloads}
+func NewRequestMulti(cmd string, args []string, multiPayloads [][]byte) *Request {
+	return &Request{Time: time.Now(), Cmd: cmd, Args: args, MultiPayloads: multiPayloads}
 }
 
 // GetArgumentInt returns int argument by index i. Return error if unable to parse int, or requested index too big

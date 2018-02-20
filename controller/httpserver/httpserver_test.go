@@ -22,7 +22,6 @@ func init() {
 	log.SetLevel(log.CRITICAL)
 }
 
-//TODO: Refactor this test
 type MockMessageHandler struct {
 	lastRequest           *message.Request
 	responseSinglePayload string
@@ -77,7 +76,7 @@ func TestHttpServer_ServeHTTP(t *testing.T) {
 			"http://localhost:6380/DEL/OK1/%D1%84%D1%8B%2F%D0%B2%D0%B0%0A", //"http://localhost:6380/DEL/OK1/" + url.PathEscape("фы/ва\n"),
 			"",
 			nil,
-			message.NewRequestSingle("DEL", []string{"OK1", "фы/ва\n"}, map[string]string{}, []byte("")),
+			message.NewRequestSingle("DEL", []string{"OK1", "фы/ва\n"}, []byte("")),
 			http.StatusOK,
 			message.StatusOk,
 		},
@@ -95,7 +94,7 @@ func TestHttpServer_ServeHTTP(t *testing.T) {
 			"http://localhost:6380/KEYS/" + url.PathEscape("*"),
 			"",
 			nil,
-			message.NewRequestSingle("KEYS", []string{"*"}, map[string]string{}, []byte("")),
+			message.NewRequestSingle("KEYS", []string{"*"}, []byte("")),
 			http.StatusOK,
 			message.StatusOk,
 		},
@@ -104,7 +103,7 @@ func TestHttpServer_ServeHTTP(t *testing.T) {
 			"http://localhost:6380/GET/NOTFOUND",
 			"",
 			nil,
-			message.NewRequestSingle("GET", []string{"NOTFOUND"}, map[string]string{}, []byte("")),
+			message.NewRequestSingle("GET", []string{"NOTFOUND"}, []byte("")),
 			http.StatusNotFound,
 			message.StatusNotFound,
 		},
@@ -113,7 +112,7 @@ func TestHttpServer_ServeHTTP(t *testing.T) {
 			"http://localhost:6380/LPUSH/OK",
 			"",
 			[]string{"val1", "ЫФ3\n\"\r"},
-			message.NewRequestMulti("LPUSH", []string{"OK"}, map[string]string{}, [][]byte{[]byte("val1"), []byte("ЫФ3\n\"\r")}),
+			message.NewRequestMulti("LPUSH", []string{"OK"}, [][]byte{[]byte("val1"), []byte("ЫФ3\n\"\r")}),
 			http.StatusOK,
 			message.StatusOk,
 		},
@@ -122,7 +121,7 @@ func TestHttpServer_ServeHTTP(t *testing.T) {
 			"http://localhost:6380/LPUSH/WRONGTYPE",
 			"",
 			nil,
-			message.NewRequestSingle("LPUSH", []string{"WRONGTYPE"}, map[string]string{}, []byte("")),
+			message.NewRequestSingle("LPUSH", []string{"WRONGTYPE"}, []byte("")),
 			http.StatusBadRequest,
 			message.StatusTypeMismatch,
 		},
@@ -135,7 +134,7 @@ func TestHttpServer_ServeHTTP(t *testing.T) {
 		req := newMockRequest(test.usePost, test.url, test.payload, test.multiPayloads)
 		s.ServeHTTP(recorder, req)
 
-		// clead request times to avoid nanosecond differences
+		// clear request times to avoid nanosecond differences
 		if test.wantMessage != nil {
 			test.wantMessage.Time = time.Time{}
 			mockHandler.lastRequest.Time = time.Time{}
