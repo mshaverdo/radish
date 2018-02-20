@@ -96,6 +96,16 @@ func (e *MockEngine) DelSubmap(submap map[string]*Item) (count int) {
 	return count
 }
 
+// FullLock locks engine and all items to ensure exclusive access to its content
+func (e *MockEngine) FullLock() {
+	//do nothing
+}
+
+// FullUnlock unlocks engine and all items
+func (e *MockEngine) FullUnlock() {
+	//do nothing
+}
+
 /////////////////////  Tests  ///////////////////////////
 
 func TestCore_Keys(t *testing.T) {

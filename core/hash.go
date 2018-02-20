@@ -131,3 +131,21 @@ func (e *HashEngine) GobDecode(gobData []byte) error {
 
 	return nil
 }
+
+// FullLock locks engine and all items to ensure exclusive access to its content
+func (e *HashEngine) FullLock() {
+	e.mu.Lock()
+
+	for _, v := range e.data {
+		v.Lock()
+	}
+}
+
+// FullUnlock unlocks engine and all items
+func (e *HashEngine) FullUnlock() {
+	for _, v := range e.data {
+		v.Unlock()
+	}
+
+	e.mu.Unlock()
+}

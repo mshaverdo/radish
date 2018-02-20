@@ -141,8 +141,6 @@ func New(host string, port int, dataDir string) *Controller {
 
 // ListenAndServe starts a new radish server
 func (c *Controller) ListenAndServe() error {
-	//TODO: реализовать периодический мерж лога в дмап базы
-	//TODO: оставить возможность переключиться на fork(). в форке попробовать реализовать сериализацию через C protobuf
 	if c.isPersistent {
 		if err := c.keeper.Start(); err != nil {
 			return err
@@ -161,6 +159,10 @@ func (c *Controller) ListenAndServe() error {
 
 // Shutdown gracefully shuts server down
 func (c *Controller) Shutdown() {
+	for !c.isRunning() {
+		time.Sleep(100 * time.Millisecond)
+	}
+
 	log.Info("Shutting down Radish...")
 	c.stop()
 	c.srv.Stop()

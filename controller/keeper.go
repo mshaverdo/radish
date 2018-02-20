@@ -43,10 +43,10 @@ type storageData struct {
 }
 
 type Keeper struct {
-	takeSnapshotInterval time.Duration
-	syncPolicy           SyncPolicy
-	dataDir              string
-	core                 Core
+	updateSnapshotInterval time.Duration
+	syncPolicy             SyncPolicy
+	dataDir                string
+	core                   Core
 
 	processor *Processor
 
@@ -55,15 +55,20 @@ type Keeper struct {
 	walFile    *os.File
 	walEncoder *gob.Encoder
 	lastSync   time.Time
+
+	// wg to wait for service storage-updating goroutines (runSnapshotter, etc)
+	serviceWg sync.WaitGroup
+	stopChan  chan struct{}
 }
 
 func NewKeeper(core Core, dataDir string, policy SyncPolicy, snapshotInterval time.Duration) *Keeper {
 	return &Keeper{
-		core:                 core,
-		dataDir:              dataDir,
-		syncPolicy:           policy,
-		takeSnapshotInterval: snapshotInterval,
-		processor:            NewProcessor(core),
+		core:                   core,
+		dataDir:                dataDir,
+		syncPolicy:             policy,
+		updateSnapshotInterval: snapshotInterval,
+		processor:              NewProcessor(core),
+		stopChan:               make(chan struct{}),
 	}
 }
 
@@ -89,7 +94,13 @@ func (k *Keeper) restoreStorageState() error {
 	if err := k.loadStorage(); err != nil {
 		return err
 	}
-	processedWals, err := k.processAllWals()
+
+	wals, err := k.getDataDirWals()
+	if err != nil {
+		return err
+	}
+
+	processedWals, err := k.processWals(wals)
 	if err != nil {
 		return err
 	}
@@ -138,14 +149,18 @@ func (k *Keeper) loadStorage() error {
 	return nil
 }
 
-func (k *Keeper) processAllWals() (processedWals []string, err error) {
-	allFiles, err := filepath.Glob(k.walFileName("*"))
+func (k *Keeper) getDataDirWals() (wals []string, err error) {
+	wals, err = filepath.Glob(k.walFileName("*"))
 	if err != nil {
-		return nil, fmt.Errorf("Keeper.processAllWals(): %s", err)
+		return nil, fmt.Errorf("Keeper.getDataDirWals(): %s", err)
 	}
 
+	return wals, nil
+}
+
+func (k *Keeper) processWals(wals []string) (processedWals []string, err error) {
 	var messageIds []int
-	for _, v := range allFiles {
+	for _, v := range wals {
 		id := 0
 		fmt.Sscanf(v, k.walFileName("%d"), &id)
 		if id > 0 {
@@ -222,6 +237,10 @@ func (k *Keeper) persistStorage() error {
 		MessageId: k.messageId,
 	}
 
+	// ensure exclusive access to engine during encoding
+	data.Engine.FullLock()
+	defer data.Engine.FullUnlock()
+
 	enc := gob.NewEncoder(file)
 	if err := enc.Encode(data); err != nil {
 		return fmt.Errorf("Keeper.persistStorage(): %s", err)
@@ -240,6 +259,10 @@ func (k *Keeper) Shutdown() error {
 	if !k.isRunning() {
 		panic("Program logic error: Tying to shut down not running Keeper")
 	}
+
+	// wait for background updater finishes
+	close(k.stopChan)
+	k.serviceWg.Wait()
 
 	log.Infof("Persisting storage...")
 	err := k.persistStorage()
@@ -265,12 +288,16 @@ func (k *Keeper) Start() (err error) {
 		return err
 	}
 
-	_, err = k.startNewWal()
+	_, _, err = k.startNewWal()
+
+	k.serviceWg.Add(1)
+	go k.runSnapshotUpdater()
+
 	return err
 }
 
 // startNewWal closes current WAL file and starts new
-func (k *Keeper) startNewWal() (oldWalFilename string, err error) {
+func (k *Keeper) startNewWal() (oldWalFilename, newWalFilename string, err error) {
 	k.mutex.Lock()
 	defer k.mutex.Unlock()
 
@@ -280,14 +307,14 @@ func (k *Keeper) startNewWal() (oldWalFilename string, err error) {
 	if _, err := os.Stat(filename); !os.IsNotExist(err) {
 		err = fmt.Errorf("Keeper.startNewWal(): trying to write WAL to existing file: %s", filename)
 		log.Error(err.Error())
-		return "", err
+		return "", "", err
 	}
 
 	file, err := os.Create(filename)
 	if err != nil {
 		err = fmt.Errorf("Keeper.startNewWal(): error creating WAL file %s: %s", filename, err.Error())
 		log.Error(err.Error())
-		return "", err
+		return "", "", err
 	}
 
 	if k.walFile != nil {
@@ -298,7 +325,7 @@ func (k *Keeper) startNewWal() (oldWalFilename string, err error) {
 	k.walFile = file
 	k.walEncoder = gob.NewEncoder(k.walFile)
 
-	return oldWalFilename, nil
+	return oldWalFilename, k.walFile.Name(), nil
 }
 
 func (k *Keeper) walFileName(messageId interface{}) string {
@@ -313,4 +340,74 @@ func (k *Keeper) isRunning() bool {
 	k.mutex.Lock()
 	defer k.mutex.Unlock()
 	return k.walFile != nil
+}
+
+func (k *Keeper) runSnapshotUpdater() {
+	defer k.serviceWg.Done()
+
+	tick := time.Tick(k.updateSnapshotInterval)
+	for {
+		select {
+		case <-k.stopChan:
+			return
+		case <-tick:
+			k.updateSnapshot()
+		}
+	}
+}
+
+// updateSnapshot starts new WAL and processes old WALs into existing storage snapshot
+func (k *Keeper) updateSnapshot() error {
+	log.Notice("Updating a snapshot")
+	_, newWal, err := k.startNewWal()
+	if err != nil {
+		return err
+	}
+
+	allWals, err := k.getDataDirWals()
+	if err != nil {
+		return err
+	}
+
+	// remove newWal from list
+	var processingWals, processedWals []string
+	for _, v := range allWals {
+		if v != newWal {
+			processingWals = append(processingWals, v)
+		}
+	}
+	if len(allWals) == len(processingWals) {
+		panic("Program logic error: new WAL must be in datadir: " + k.dataDir + " " + newWal)
+	}
+
+	snapshotKeeper := NewKeeper(
+		core.NewCore(core.NewHashEngine()),
+		k.dataDir,
+		SyncNever,
+		0,
+	)
+
+	if err := snapshotKeeper.loadStorage(); err != nil {
+		return err
+	}
+
+	processedWals, err = snapshotKeeper.processWals(processingWals)
+	if err != nil {
+		return err
+	}
+
+	// dump storage with merged WALs to disk
+	if err := snapshotKeeper.persistStorage(); err != nil {
+		return err
+	}
+
+	// all OK, remove processed WALs
+	for _, v := range processedWals {
+		err := os.Remove(v)
+		if err != nil {
+			log.Warningf("Unable to remove processed WAL %s: %s", v, err)
+		}
+	}
+
+	return nil
 }

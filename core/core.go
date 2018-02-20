@@ -9,7 +9,7 @@ import (
 //TODO: check performance! check Locks waiting!
 //TODO: if Engine.Lock() will be a bottleneck, try to use sharding by engines
 //TODO: make Expire, ttl, persist as in Redis (return int instead an error)
-
+//TODO: rename core.NewCore to core.New. first, look to effective go for conventoins
 // configuration
 var (
 	// CollectExpiredBatchSize items processed by CollectExpired()  at once, in single mutex lock to reduce mutex lock overhead
@@ -48,6 +48,12 @@ type Engine interface {
 	// Keys returns all keys existing in the
 	//TODO: check performance in Keys() & CollectExpired(): maybe, it's better to return map[string]*Item to avoid extra Get() in those methods
 	Keys() (keys []string)
+
+	// FullLock locks engine and all items to ensure exclusive access to its content
+	FullLock()
+
+	// FullUnlock unlocks engine and all items
+	FullUnlock()
 }
 
 // Core provides domain operations on the storage -- get, set, keys, hset, hdel, etc
