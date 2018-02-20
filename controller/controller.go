@@ -113,13 +113,19 @@ type Controller struct {
 }
 
 // New Constructs new instance of Controller
-func New(host string, port int, dataDir string) *Controller {
+func New(
+	host string,
+	port int,
+	dataDir string,
+	syncPolicy SyncPolicy,
+	collectInterval, mergeWalInterval time.Duration,
+) *Controller {
 	c := Controller{
 		host:                   host,
 		port:                   port,
 		core:                   core.NewCore(core.NewHashEngine()),
 		stopChan:               make(chan struct{}),
-		collectExpiredInterval: 60 * time.Second,
+		collectExpiredInterval: collectInterval,
 		dataDir:                dataDir,
 		isPersistent:           dataDir != "",
 	}
@@ -131,8 +137,8 @@ func New(host string, port int, dataDir string) *Controller {
 		c.keeper = NewKeeper(
 			c.core,
 			dataDir,
-			SyncSometimes,
-			60*time.Second,
+			syncPolicy,
+			mergeWalInterval,
 		)
 	}
 

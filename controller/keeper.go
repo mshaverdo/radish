@@ -43,10 +43,10 @@ type storageData struct {
 }
 
 type Keeper struct {
-	updateSnapshotInterval time.Duration
-	syncPolicy             SyncPolicy
-	dataDir                string
-	core                   Core
+	mergeWalInterval time.Duration
+	syncPolicy       SyncPolicy
+	dataDir          string
+	core             Core
 
 	processor *Processor
 
@@ -61,14 +61,14 @@ type Keeper struct {
 	stopChan  chan struct{}
 }
 
-func NewKeeper(core Core, dataDir string, policy SyncPolicy, snapshotInterval time.Duration) *Keeper {
+func NewKeeper(core Core, dataDir string, policy SyncPolicy, mergeWalInterval time.Duration) *Keeper {
 	return &Keeper{
-		core:                   core,
-		dataDir:                dataDir,
-		syncPolicy:             policy,
-		updateSnapshotInterval: snapshotInterval,
-		processor:              NewProcessor(core),
-		stopChan:               make(chan struct{}),
+		core:             core,
+		dataDir:          dataDir,
+		syncPolicy:       policy,
+		mergeWalInterval: mergeWalInterval,
+		processor:        NewProcessor(core),
+		stopChan:         make(chan struct{}),
 	}
 }
 
@@ -345,7 +345,7 @@ func (k *Keeper) isRunning() bool {
 func (k *Keeper) runSnapshotUpdater() {
 	defer k.serviceWg.Done()
 
-	tick := time.Tick(k.updateSnapshotInterval)
+	tick := time.Tick(k.mergeWalInterval)
 	for {
 		select {
 		case <-k.stopChan:
