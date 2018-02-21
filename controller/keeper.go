@@ -194,6 +194,7 @@ func (k *Keeper) processWal(filename string) error {
 
 	dec := gob.NewDecoder(file)
 	req := new(message.Request)
+	//TODO: add optional broken records passing
 	for err := dec.Decode(req); err != io.EOF; err = dec.Decode(req) {
 		if err != nil {
 			return fmt.Errorf("Keeper.processWal(): can't process %s: %s", filename, err)

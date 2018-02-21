@@ -1,6 +1,10 @@
+#Radish
+Radish is a 100%-golang in-memory key-value storage for strings (including binary data), lists and dictionaries
+with per-key TTL and disk persistence. 
+
 ## Components
 - `radish-server    ` - The server
-- `radish-benchmark ` - The server benchmark tool
+- `radish-benchmark ` - The server benchmarking tool
 
 ## Getting Started
 
@@ -12,7 +16,7 @@ $ git clone https://github.com/mshaverdo/radish
 
 ### Building Radish 
 
-To build everything simply:
+To build everything just type:
 ```
 $ make
 ```
@@ -23,12 +27,13 @@ $ make test
 ```
 
 ## Running 
-For server command line options invoke:
+To get server built-in cli hint:
 ```
-$ ./radish-server -h
+$ ./radish-server --help
 ```
 
-Run server on port 6380, with persistence into current dir, taking a storage snapshot every 10 minutes and sync write-ahead log to disk once a second:
+Run server on port 6380, with persistence into current dir, 
+taking a storage snapshot every 10 minutes and sync write-ahead log to disk once a second:
 ```
 $ ./radish-server -h localhost -p 6380 -d ./ -m 600 -s 1
 ```
@@ -41,10 +46,10 @@ $ ./radish-server
 
 ## Benchmark 
 
-For benchmark command line options invoke:
+To get server built-in cli hint:
 
 ```
-$ ./radish-benchmark -h
+$ ./radish-benchmark --help
 ```
 
 Run standard benchmark for localhost server with 20 threads, 100k requests, SET, GET, LPUSH, LPOP operations:
@@ -63,7 +68,7 @@ Total: 1000000/1000000, 14.835083023s, 67408 requests per second
 
 ## API
 ### Go client
-Radish server going along with go client library, `github.com/mshaverdo/radish-client`
+Radish server is shipped with with the go client library, `github.com/mshaverdo/radish-client`
 
 **Key features:**
 
@@ -72,14 +77,14 @@ Radish server going along with go client library, `github.com/mshaverdo/radish-c
 * command-as-method: `client.Get(key)` for `/GET/key` command
 * go-redis-like return values: `StringResult`, `StringSliceResult`, `IntResult`, etc
 
-more examples see in `github.com/mshaverdo/radish-client/example`
+please find more examples in `github.com/mshaverdo/radish-client/example`
 
-#### HTTP
-Radish has simple HTTP network API. Generally, command looks like `/<CMD>/<KEY>/<PARAM>`. 
-For example, `/HGET/<KEY>/<FIELD>` returns value in field \<FIELD\> of dict in \<KEY\>.
-For requests/responses with multiple data items in one request (`LPUSH`, `KEYS`, `LRANGE`, etc) `Content-Type: multipart/form-data` used.
+### HTTP
+Radish has simple HTTP network API. Generally, a command looks like `/<CMD>/<KEY>/<PARAM>`. 
+For example, `/HGET/<KEY>/<FIELD>` returns the value in the field \<FIELD\> of dict in \<KEY\>.
+`Content-Type: multipart/form-data` is utilized for requests or responses with multiple data items in one request (`LPUSH`, `KEYS`, `LRANGE`, etc).
 
-Result status placed in header `X-Radish-Status`. Possible statuses:
+The command execution status is placed into the `X-Radish-Status` header. Possible statuses:
 * `StatusOk`  - Command processed successfully
 * `StatusError` - General error
 * `StatusNotFound` - Key not found
@@ -88,7 +93,7 @@ Result status placed in header `X-Radish-Status`. Possible statuses:
 
 **SET**
 
- Set key to hold the string value.
+ Set a key to hold a string value.
  If key already holds a value, it is overwritten, regardless of its type.
  Any previous time to live associated with the key is discarded on successful SET operation.
 
@@ -157,7 +162,7 @@ Error processing "GET": "core: item not found"
 
 **KEYS**
 
- Keys returns all keys matching glob pattern
+ Keys returns all keys matching a glob pattern.
  Warning: consider KEYS as a command that should only be used in production environments with extreme care.
  It may ruin performance when it is executed against large databases.
 

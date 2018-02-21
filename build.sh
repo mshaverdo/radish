@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+LDFLAGS="$LDFLAGS -X main.assertionEnabled=0"
+
 # Check go install
 if [ "$(which go)" == "" ]; then
 	echo "error: Go is not installed. Please download and follow installation instructions at https://golang.org/dl to continue."

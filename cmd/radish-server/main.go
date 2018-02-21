@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"github.com/mshaverdo/assert"
 	"github.com/mshaverdo/radish/controller"
 	"github.com/mshaverdo/radish/log"
 	"os"
@@ -9,6 +10,12 @@ import (
 	"syscall"
 	"time"
 )
+
+var assertionEnabled = "1"
+
+func init() {
+	assert.Enabled = (assertionEnabled == "1")
+}
 
 func main() {
 	var (

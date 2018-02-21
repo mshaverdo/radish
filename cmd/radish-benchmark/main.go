@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/mshaverdo/assert"
 	"github.com/mshaverdo/radish/radish-client"
 	"math/rand"
 	"net/http"
@@ -10,6 +11,12 @@ import (
 	"sync"
 	"time"
 )
+
+var assertionEnabled = "1"
+
+func init() {
+	assert.Enabled = (assertionEnabled == "1")
+}
 
 type Test struct {
 	fnc                                  func(*Test) (bool, error)
