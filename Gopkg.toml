@@ -42,9 +42,5 @@
   version = "0.1.0"
 
 [[constraint]]
-  name = "github.com/go-redis/redis"
-  version = "6.8.3"
-
-[[constraint]]
   branch = "master"
   name = "github.com/mshaverdo/assert"

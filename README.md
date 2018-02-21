@@ -1,24 +1,224 @@
-GET /KEYS
-GET /GET/<KEY>
-POST /SET/<KEY>
-POST /DEL/<KEY>
+## Components
+- `radish-server    ` - The server
+- `radish-benchmark ` - The server benchmark tool
 
-GET /HKEYS/<KEY>
-GET /HVALS/<KEY>
-GET /HGET/<KEY>/<FIELD>
-POST /HSET/<KEY>/<FIELD>
-POST /HDEL/<KEY>/<FIELD>
+## Getting Started
 
-GET /LLEN/<KEY>
-GET /LRANGE/<KEY>/<START>/<STOP>
-GET /LINDEX/<KEY>/<INDEX>
-POST /LSET/<KEY>/<INDEX>
-POST /LREM/<KEY>/<FIELD>
+### Getting Radish
 
-per-key ttl:
-set HTTP header "X-Radish-TTL: <TTL IN SECONDS>"
+```
+$ git clone https://github.com/mshaverdo/radish
+```
+
+### Building Radish 
+
+To build everything simply:
+```
+$ make
+```
+
+To build and test:
+```
+$ make test
+```
+
+## Running 
+For server command line options invoke:
+```
+$ ./radish-server -h
+```
+
+Run server on port 6380, with persistence into current dir, taking a storage snapshot every 10 minutes and sync write-ahead log to disk once a second:
+```
+$ ./radish-server -h localhost -p 6380 -d ./ -m 600 -s 1
+```
+
+or just
+
+```
+$ ./radish-server
+```
+
+## Benchmark 
+
+For benchmark command line options invoke:
+
+```
+$ ./radish-benchmark -h
+```
+
+Run standard benchmark for localhost server with 20 threads, 100k requests, SET, GET, LPUSH, LPOP operations:
+
+```
+$ ./radish-benchmark
+```
+
+Running only GET & SET tests, 1M requests, with 1M keyspace len on Amazon t2.2xlarge instance:
+```
+$ ./radish_benchmark -n 1000000 -r 1000000 -t GET,SET
+GET: 500000/500000 success
+SET: 500000/500000 success
+Total: 1000000/1000000, 14.835083023s, 67408 requests per second
+```
+
+## API
+### Go client
+Radish server going along with go client library, `github.com/mshaverdo/radish-client`
+
+**Key features:**
+
+* inspired by go-redis
+* concurrency-safe
+* command-as-method: `client.Get(key)` for `/GET/key` command
+* go-redis-like return values: `StringResult`, `StringSliceResult`, `IntResult`, etc
+
+more examples see in `github.com/mshaverdo/radish-client/example`
+
+#### HTTP
+Radish has simple HTTP network API. Generally, command looks like `/<CMD>/<KEY>/<PARAM>`. 
+For example, `/HGET/<KEY>/<FIELD>` returns value in field \<FIELD\> of dict in \<KEY\>.
+For requests/responses with multiple data items in one request (`LPUSH`, `KEYS`, `LRANGE`, etc) `Content-Type: multipart/form-data` used.
+
+Result status placed in header `X-Radish-Status`. Possible statuses:
+* `StatusOk`  - Command processed successfully
+* `StatusError` - General error
+* `StatusNotFound` - Key not found
+* `StatusTypeMismatch` - Trying to perform command on inappropriate key type (eg. `GET` on list) 
 
 
+**SET**
 
-#проверить, как в редис происходит удаление/создание списков
-#пары значений не предоставлять, только списки в режиме multipart/mixed
+ Set key to hold the string value.
+ If key already holds a value, it is overwritten, regardless of its type.
+ Any previous time to live associated with the key is discarded on successful SET operation.
+
+```
+$ curl -v "http://localhost:6380/SET/K_12" -d "val12"
+*   Trying 127.0.0.1...
+* Connected to localhost (127.0.0.1) port 6380 (#0)
+> POST /SET/K_12 HTTP/1.1
+> Host: localhost:6380
+> User-Agent: curl/7.47.0
+> Accept: */*
+> Content-Length: 5
+> Content-Type: application/x-www-form-urlencoded
+> 
+* upload completely sent off: 5 out of 5 bytes
+< HTTP/1.1 200 OK
+< X-Radish-Status: StatusOk
+< Date: Wed, 21 Feb 2018 01:53:46 GMT
+< Content-Length: 0
+< Content-Type: text/plain; charset=utf-8
+< 
+* Connection #0 to host localhost left intact
+```
+
+**GET**
+
+ Get the value of key. If the key does not exist the special value nil is returned.
+ An error is returned if the value stored at key is not a string, because GET only handles string values.
+
+```
+$ curl -v "http://localhost:6380/GET/K_12"  
+*   Trying 127.0.0.1...
+* Connected to localhost (127.0.0.1) port 6380 (#0)
+> GET /GET/K_12 HTTP/1.1
+> Host: localhost:6380
+> User-Agent: curl/7.47.0
+> Accept: */*
+> 
+< HTTP/1.1 200 OK
+< X-Radish-Status: StatusOk
+< Date: Wed, 21 Feb 2018 01:54:48 GMT
+< Content-Length: 5
+< Content-Type: text/plain; charset=utf-8
+< 
+* Connection #0 to host localhost left intact
+val12
+```
+```
+$ curl -v "http://localhost:6380/GET/K_13"  
+*   Trying 127.0.0.1...
+* Connected to localhost (127.0.0.1) port 6380 (#0)
+> GET /GET/K_13 HTTP/1.1
+> Host: localhost:6380
+> User-Agent: curl/7.47.0
+> Accept: */*
+> 
+< HTTP/1.1 404 Not Found
+< X-Radish-Status: StatusNotFound
+< Date: Wed, 21 Feb 2018 01:55:55 GMT
+< Content-Length: 46
+< Content-Type: text/plain; charset=utf-8
+< 
+* Connection #0 to host localhost left intact
+Error processing "GET": "core: item not found"
+```
+
+**KEYS**
+
+ Keys returns all keys matching glob pattern
+ Warning: consider KEYS as a command that should only be used in production environments with extreme care.
+ It may ruin performance when it is executed against large databases.
+
+
+```
+$ curl -v  "http://localhost:6380/KEYS/K*"  
+*   Trying 127.0.0.1...
+* Connected to localhost (127.0.0.1) port 6380 (#0)
+> GET /KEYS/K* HTTP/1.1
+> Host: localhost:6380
+> User-Agent: curl/7.47.0
+> Accept: */*
+> 
+< HTTP/1.1 200 OK
+< Content-Type: multipart/form-data; boundary=a562708900b3e3e511fffd14509f4a3cae057da7a598e0cee088d8612a14
+< X-Radish-Status: StatusOk
+< Date: Wed, 21 Feb 2018 01:57:00 GMT
+< Content-Length: 360
+< 
+--a562708900b3e3e511fffd14509f4a3cae057da7a598e0cee088d8612a14
+Content-Type: text/plain
+
+K_12
+--a562708900b3e3e511fffd14509f4a3cae057da7a598e0cee088d8612a14
+Content-Type: text/plain
+
+K_10
+--a562708900b3e3e511fffd14509f4a3cae057da7a598e0cee088d8612a14
+Content-Type: text/plain
+
+K_11
+--a562708900b3e3e511fffd14509f4a3cae057da7a598e0cee088d8612a14--
+* Connection #0 to host localhost left intact
+```
+
+**Full list of supported commands:**
+
+Strings:
+*  `/KEYS/<GLOB_PATTERN%>` - Keys returns all keys matching glob pattern. Returns multipart/form-data result.
+*  `/GET/<KEY>` - Get the value of key. If the key does not exist the special value nil is returned.
+*  `/SET/<KEY>` - Set key to hold the string value. Payload content in POST body.
+*  `/SETEX/<KEY>/<TTL_SECONDS>` - Set key to hold the string value and set key to timeout after a given number of seconds. Payload content in POST body.
+*  `/DEL/<KEY>[/<KEY>...]` - Del Removes the specified keys, ignoring not existing and returns count of actually removed values.
+
+Dicts:
+*  `/DKEYS/<KEY>` - Returns all field names in the dict stored at key. Returns multipart/form-data result.
+*  `/DGETALL/<KEY>`- DGetAll Returns all fields and values of the hash stored at key. Returns multipart/form-data result.
+*  `/DGET/<KEY>/<FIELD>` - DGet Returns the value associated with field in the dict stored at key.
+*  `/DSET/<KEY>/<FIELD>` - DSet Sets field in the hash stored at key to value.  Payload content in POST body.
+*  `/DDEL/<KEY>/<FIELD>[/<FIELD>...]` - DDel Removes the specified fields from the hash stored at key.
+
+Lists:
+*  `/LLEN/<KEY>` - LLen Returns the length of the list stored at key.
+*  `/LRANGE/<KEY>/<START>/<STOP>`  - LRange returns the specified elements of the list stored at key. Returns multipart/form-data result.
+*  `/LINDEX/<KEY>/<INDEX>` - LIndex Returns the element at index index in the list stored at key.
+*  `/LSET/<KEY>/<INDEX>` -  LSet Sets the list element at index to value. Payload content in POST body.
+*  `/LPUSH/<KEY>/` - LPush Insert all the specified values at the head of the list stored at key.  multipart/form-data Payload content in POST body.
+*  `/LPOP/<KEY>/` - LPop Removes and returns the first element of the list stored at key.
+
+TTL:
+*  `/TTL/<KEY>` - Ttl Returns the remaining time to live of a key that has a timeout.
+*  `/EXPIRE/<KEY>/<TTL_SECONDS>` - Expire sets a timeout on key. After the timeout has expired, the key will automatically be deleted.
+*  `/PERSIST/<KEY>` - Persist Removes the existing timeout on key.
+
