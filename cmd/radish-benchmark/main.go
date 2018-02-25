@@ -18,6 +18,12 @@ func init() {
 	assert.Enabled = (assertionEnabled == "1")
 }
 
+//TODO: погонять этот бенчмарк в заменой radhsh.Clinet на redis.client
+//TODO: пройтись по всему коду, посмотреть чтобы возвращаемый значения везде были единообразны
+//TODO: перенести http, resp сервера в radish/ApiServer/http, radish/ApiServer/resp
+//TODO: проверить перфоманс с включенным WAL
+//TODO: паралельная работа http & resp серверов
+
 type Test struct {
 	fnc                                  func(*Test) (bool, error)
 	succeeded, failed, remainingRequests Counter

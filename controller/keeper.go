@@ -30,6 +30,12 @@ const (
 	SyncAlways
 )
 
+//TODO: storage.gob loading is TOO slow
+//TODO: write WAL in separate thread if syncPolicy is never or sometimes
+//TODO: писать в WAL в отдельном треде, чтобы не аффектить общий перфоманс, если policy Never или Sometimes
+//TODO: пропускать ПОСЛЕДНЮЮ запись из WAL если она битая они могут получитсья в рещультате сбоя питания. Если после битой записи есть другие -- валиться с ошибкой.
+//TODO: GOB marshall все равно пишет слишком долго!
+
 // Avoid "Unused Constant" warning
 var _ = SyncNever
 
@@ -194,6 +200,7 @@ func (k *Keeper) processWal(filename string) error {
 
 	dec := gob.NewDecoder(file)
 	req := new(message.Request)
+	processed := 0
 	//TODO: add optional broken records passing
 	for err := dec.Decode(req); err != io.EOF; err = dec.Decode(req) {
 		if err != nil {
@@ -218,8 +225,10 @@ func (k *Keeper) processWal(filename string) error {
 
 		k.messageId = req.Id
 		req = new(message.Request)
+		processed++
 	}
 
+	log.Infof("%d requests processed if WAL %s", processed, filename)
 	return nil
 }
 

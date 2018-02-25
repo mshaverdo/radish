@@ -7,6 +7,7 @@ import (
 	"github.com/mshaverdo/radish/log"
 	"os"
 	"os/signal"
+	"runtime/pprof"
 	"syscall"
 	"time"
 )
@@ -25,9 +26,11 @@ func main() {
 		mergeWalInterval            int
 		syncPolicy                  int
 		quiet, verbose, veryVerbose bool
+		cpuProfile                  string
 	)
 
 	flag.StringVar(&host, "h", "", "The listening host.")
+	flag.StringVar(&cpuProfile, "cpuprofile", "", "dump cpu profile into specified file")
 	flag.IntVar(&port, "p", 6380, "The listening port.")
 	flag.IntVar(&collectInterval, "e", 100, "Expired items collection interval in seconds")
 	flag.IntVar(&mergeWalInterval, "m", 600, "Merge WAL into snapshot interval in seconds")
@@ -37,6 +40,16 @@ func main() {
 	flag.BoolVar(&quiet, "q", false, "Quiet logging. Totally silent.")
 	flag.BoolVar(&veryVerbose, "vv", false, "Enable very verbose logging.")
 	flag.Parse()
+
+	//TODO: disable in production
+	if cpuProfile != "" {
+		if f, err := os.Create(cpuProfile); err == nil {
+			pprof.StartCPUProfile(f)
+			defer pprof.StopCPUProfile()
+		} else {
+			log.Errorf("Can't create file %s: %s", cpuProfile, err)
+		}
+	}
 
 	switch {
 	case veryVerbose:
