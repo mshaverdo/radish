@@ -23,6 +23,7 @@ func init() {
 //TODO: перенести http, resp сервера в radish/ApiServer/http, radish/ApiServer/resp
 //TODO: проверить перфоманс с включенным WAL
 //TODO: паралельная работа http & resp серверов
+//TODO: переименовать в radish-http-benchmark
 
 type Test struct {
 	fnc                                  func(*Test) (bool, error)

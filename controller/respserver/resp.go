@@ -88,15 +88,15 @@ func (s *RespServer) handler(conn redcon.Conn, command redcon.Command) {
 		return
 	}
 
-	log.Debugf("Received request: %q", command.Args)
+	//log.Debugf("Received request: %q", command.Args)
 
 	request := message.NewRequest(cmd, command.Args[1:])
 
-	log.Debugf("Handling request: %s", request)
+	//log.Debugf("Handling request: %s", request)
 
 	response := s.messageHandler.HandleMessage(request)
 
-	log.Debugf("Sending response: %s", response)
+	//log.Debugf("Sending response: %s", response)
 
 	err := sendResponse(response, conn)
 	if err != nil {

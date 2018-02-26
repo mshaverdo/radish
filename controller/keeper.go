@@ -80,6 +80,7 @@ func NewKeeper(core Core, dataDir string, policy SyncPolicy, mergeWalInterval ti
 }
 
 // WriteToWal writes request to WAL
+//TODO: реорганизовать с применением каналов
 func (k *Keeper) WriteToWal(request *message.Request) error {
 	k.mutex.Lock()
 	defer k.mutex.Unlock()

@@ -48,6 +48,7 @@ func main() {
 	flag.Parse()
 
 	//TODO: disable in production
+	//TODO: разобраться, почему с включенным профилем обрабатывается на 10% больше RPS
 	if cpuProfile != "" {
 		if f, err := os.Create(cpuProfile); err == nil {
 			pprof.StartCPUProfile(f)

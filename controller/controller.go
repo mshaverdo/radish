@@ -245,6 +245,7 @@ func (c *Controller) stop() {
 }
 
 func (c *Controller) isRunning() bool {
+	//TODO: change to RWmutex, get rid of defer to improve performance
 	c.isRunningMutex.Lock()
 	defer c.isRunningMutex.Unlock()
 	return c.isRunningFlag
