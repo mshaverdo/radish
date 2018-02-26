@@ -16,21 +16,13 @@ type Request struct {
 	// Cmd is a Command type
 	Cmd string
 	// Args is a list of command positional args
-	Args []string
+	Args [][]byte
 	// Payload carrys value for SET/HSET/etc command
-	Payload []byte
-	// MultiPayloads intended for MSET/HMSET and other bulk commands
-	MultiPayloads [][]byte
 }
 
-// NewRequestSingle constructs new Request object with single payload
-func NewRequestSingle(cmd string, args []string, payload []byte) *Request {
-	return &Request{Time: time.Now(), Cmd: cmd, Args: args, Payload: payload}
-}
-
-// NewRequestMulti constructs new Request object with multi payloads
-func NewRequestMulti(cmd string, args []string, multiPayloads [][]byte) *Request {
-	return &Request{Time: time.Now(), Cmd: cmd, Args: args, MultiPayloads: multiPayloads}
+// NewRequest constructs new Request object
+func NewRequest(cmd string, args [][]byte) *Request {
+	return &Request{Time: time.Now(), Cmd: cmd, Args: args}
 }
 
 // GetArgumentInt returns int argument by index i. Return error if unable to parse int, or requested index too big
@@ -39,20 +31,20 @@ func (r *Request) GetArgumentInt(i int) (result int, err error) {
 		return 0, errors.New(fmt.Sprintf("Trying to get not existing argument: %d > %d", i, len(r.Args)-1))
 	}
 
-	if result, err = strconv.Atoi(r.Args[i]); err != nil {
+	if result, err = strconv.Atoi(string(r.Args[i])); err != nil {
 		return 0, errors.New(fmt.Sprintf("Args[%d] isn't int: %q", i, err.Error()))
 	}
 
 	return result, err
 }
 
-// GetArgumentInt returns int argument by index i. Return error if requested index too big
+// GetArgumentInt returns string argument by index i. Return error if requested index too big
 func (r *Request) GetArgumentString(i int) (result string, err error) {
 	if i > len(r.Args)-1 {
 		return "", errors.New(fmt.Sprintf("Trying to get not existing argument: %d > %d", i, len(r.Args)-1))
 	}
 
-	return r.Args[i], nil
+	return string(r.Args[i]), nil
 }
 
 // GetArgumentVariadicString rest of returns string args beginning from i index
@@ -60,22 +52,36 @@ func (r *Request) GetArgumentVariadicString(i int) (result []string, err error) 
 	if i > len(r.Args)-1 {
 		return nil, errors.New(fmt.Sprintf("Trying to get not existing argument: %d > %d", i, len(r.Args)-1))
 	}
+	restArgs := r.Args[i:]
+	result = make([]string, len(restArgs))
+	for i, v := range restArgs {
+		result[i] = string(v)
+	}
+	return result, nil
+}
 
+// GetArgumentVariadicBytes rest of returns bytes args beginning from i index
+func (r *Request) GetArgumentVariadicBytes(i int) (result [][]byte, err error) {
+	if i > len(r.Args)-1 {
+		return nil, errors.New(fmt.Sprintf("Trying to get not existing argument: %d > %d", i, len(r.Args)-1))
+	}
 	return r.Args[i:], nil
 }
 
-func (r *Request) String() string {
-	multiPayload := make([]string, len(r.MultiPayloads))
-	for i, v := range r.MultiPayloads {
-		multiPayload[i] = string(v)
+// GetArgumentBytes returns bytes argument by index i. Return error if requested index too big
+func (r *Request) GetArgumentBytes(i int) (result []byte, err error) {
+	if i > len(r.Args)-1 {
+		return nil, errors.New(fmt.Sprintf("Trying to get not existing argument: %d > %d", i, len(r.Args)-1))
 	}
 
+	return r.Args[i], nil
+}
+
+func (r *Request) String() string {
 	return fmt.Sprintf(
-		"Request{\n\tCmd: %q \n\tArgs: %q \n\tPayload: %q \n\tMultiPayloads: %q \n}",
+		"Request{\n\tCmd: %q \n\tArgs: %q \n}",
 		r.Cmd,
 		r.Args,
-		string(r.Payload),
-		multiPayload,
 	)
 }
 
@@ -91,35 +97,38 @@ const (
 	StatusTypeMismatch
 )
 
+//go:generate stringer -type=ResponseKind
+type ResponseKind int
+
+const (
+	KindStatus ResponseKind = iota
+	KindInt
+	KindString
+	KindStringSlice
+)
+
 // Response is a container, represents a Response to Request Command
 type Response struct {
-	Status Status
-	// Payload carrys value for SET/DSET/etc command
-	Payload []byte
-	// MultiPayloads intended for LPush and other bulk commands
-	MultiPayloads [][]byte
+	Status   Status
+	Kind     ResponseKind
+	Payloads [][]byte
 }
 
 // NewResponse constructs new Response object with single payload
-func NewResponseSingle(status Status, payload []byte) *Response {
-	return &Response{Status: status, Payload: payload}
-}
-
-// NewResponse constructs new Response object with multi payloads
-func NewResponseMulti(status Status, multiPayloads [][]byte) *Response {
-	return &Response{Status: status, MultiPayloads: multiPayloads}
+func NewResponse(status Status, kind ResponseKind, payloads [][]byte) *Response {
+	return &Response{Status: status, Kind: kind, Payloads: payloads}
 }
 
 func (r *Response) String() string {
-	multiPayload := make([]string, len(r.MultiPayloads))
-	for i, v := range r.MultiPayloads {
+	multiPayload := make([]string, len(r.Payloads))
+	for i, v := range r.Payloads {
 		multiPayload[i] = string(v)
 	}
 
 	return fmt.Sprintf(
-		"Response{\n\tStatus: %q \n\tPayload: %q \n\tMultiPayloads:%q \n}",
+		"Response{\n\tStatus: %q \n\tKind: %q \n\tPayloads:%q \n}",
 		r.Status,
-		string(r.Payload),
+		r.Kind,
 		multiPayload,
 	)
 }

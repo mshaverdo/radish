@@ -1,9 +1,10 @@
-package httpserver
+package httpserver_test
 
 import (
 	"bytes"
 	"errors"
 	"github.com/go-test/deep"
+	"github.com/mshaverdo/radish/controller/httpserver"
 	"github.com/mshaverdo/radish/log"
 	"github.com/mshaverdo/radish/message"
 	"io/ioutil"
@@ -12,9 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
-	"net/url"
 	"testing"
-	"time"
 )
 
 func init() {
@@ -22,176 +21,156 @@ func init() {
 	log.SetLevel(log.CRITICAL)
 }
 
-type MockMessageHandler struct {
-	lastRequest           *message.Request
-	responseSinglePayload string
-	responseMultiPayloads []string
-}
-
-func newMockMessageHandler() *MockMessageHandler {
-	return &MockMessageHandler{
-		responseMultiPayloads: []string{"Payload1 Ы", "Payload2 Щ"},
-		responseSinglePayload: "PAYLOAD Ф",
-	}
-}
-
-// HandleMessage processes Request and return Response
-func (m *MockMessageHandler) HandleMessage(request *message.Request) *message.Response {
-	m.lastRequest = request
-
-	status := message.StatusOk
-	statuses := map[string]message.Status{
-		"OK":        message.StatusOk,
-		"ERROR":     message.StatusError,
-		"WRONGTYPE": message.StatusTypeMismatch,
-		"NOTFOUND":  message.StatusNotFound,
-	}
-	if len(request.Args) > 0 {
-		status = statuses[request.Args[0]]
-	}
-
-	if len(request.MultiPayloads) > 0 {
-		multiPayloads := [][]byte{}
-		for _, v := range m.responseMultiPayloads {
-			multiPayloads = append(multiPayloads, []byte(v))
-		}
-		return message.NewResponseMulti(status, multiPayloads)
-	} else {
-		return message.NewResponseSingle(status, []byte(m.responseSinglePayload))
-	}
-}
-
-func TestHttpServer_ServeHTTP(t *testing.T) {
+func TestHttpServer_SendResponse(t *testing.T) {
 	var tests = []struct {
-		usePost          bool
-		url              string
-		payload          string
-		multiPayloads    []string
-		wantMessage      *message.Request
-		wantHttpStatus   int
-		wantRadishStatus message.Status
+		messageStatus  message.Status
+		payloads       []string
+		kind           message.ResponseKind
+		wantHttpStatus int
+	}{
+		{
+			message.StatusOk,
+			[]string{"共産主義の幽霊\n\"\r\n'\x00"},
+			message.KindString,
+			http.StatusOK,
+		},
+		{
+			message.StatusOk,
+			[]string{"共産主義の幽霊\n\"\r\n'\x00"},
+			message.KindStringSlice,
+			http.StatusOK,
+		},
+		{
+			message.StatusNotFound,
+			nil,
+			message.KindString,
+			http.StatusNotFound,
+		},
+		{
+			message.StatusError,
+			[]string{"共産主義の幽霊\n\"\r\n'\x00", "", "\r\n\x00"},
+			message.KindStringSlice,
+			http.StatusInternalServerError,
+		},
+	}
+
+	for n, tst := range tests {
+		var response *message.Response
+		response = message.NewResponse(tst.messageStatus, tst.kind, stringsSliceToBytesSlise(tst.payloads))
+
+		recorder := httptest.NewRecorder()
+		httpserver.SendResponse(response, recorder)
+
+		if recorder.Code != tst.wantHttpStatus {
+			t.Errorf("testcase %d: %q Invalid status code: got %d, want %d", n, tst.messageStatus, recorder.Code, tst.wantHttpStatus)
+		}
+
+		if recorder.Header().Get(httpserver.StatusHeader) != tst.messageStatus.String() {
+			t.Errorf(
+				"testcase %d: Invalid radish status code: got %q, want %q",
+				n,
+				recorder.Header().Get(httpserver.StatusHeader),
+				tst.messageStatus.String(),
+			)
+		}
+
+		if tst.kind == message.KindStringSlice {
+			multiPayloads, err := praseMultipartResponse(recorder)
+			if err != nil {
+				t.Errorf("testcase %d: Unable to parse multipart response: %s", n, err.Error())
+			}
+
+			if diff := deep.Equal(multiPayloads, tst.payloads); diff != nil {
+				t.Errorf(
+					"testcase %d: Invalid payload : %s\n\ngot: %q\n\nwant: %q",
+					n,
+					diff,
+					multiPayloads,
+					tst.payloads,
+				)
+			}
+		} else if len(tst.payloads) == 1 {
+			if recorder.Body.String() != tst.payloads[0] {
+				t.Errorf("testcase %d: Invalid payload : %q != %q", n, recorder.Body.String(), tst.payloads[0])
+			}
+		}
+	}
+}
+
+func TestHttpServer_ParseRequest(t *testing.T) {
+	var tests = []struct {
+		usePost       bool
+		url           string
+		payload       string
+		multiPayloads []string
+		wantCmd       string
+		wantArgs      []string
+		wantErr       error
 	}{
 		{
 			true,
-			"http://localhost:6380/DEL/OK1/%D1%84%D1%8B%2F%D0%B2%D0%B0%0A", //"http://localhost:6380/DEL/OK1/" + url.PathEscape("фы/ва\n"),
-			"",
+			"http://localhost:6380/CMD/OK1/%D1%84%D1%8B%2F%D0%B2%D0%B0%0A/%2A",
+			"共産主義の幽霊\n\"\r\n'\x00",
 			nil,
-			message.NewRequestSingle("DEL", []string{"OK1", "фы/ва\n"}, []byte("")),
-			http.StatusOK,
-			message.StatusOk,
+			"CMD",
+			[]string{"OK1", "фы/ва\n", "*", "共産主義の幽霊\n\"\r\n'\x00"},
+			nil,
 		},
 		{
 			false,
 			"http://localhost:6380/INVALID_SHORT_REQUEST",
 			"",
 			nil,
-			nil,
-			http.StatusBadRequest,
-			message.StatusOk,
-		},
-		{
-			false,
-			"http://localhost:6380/KEYS/" + url.PathEscape("*"),
 			"",
 			nil,
-			message.NewRequestSingle("KEYS", []string{"*"}, []byte("")),
-			http.StatusOK,
-			message.StatusOk,
-		},
-		{
-			false,
-			"http://localhost:6380/GET/NOTFOUND",
-			"",
-			nil,
-			message.NewRequestSingle("GET", []string{"NOTFOUND"}, []byte("")),
-			http.StatusNotFound,
-			message.StatusNotFound,
+			errors.New("min URL parts count is 3"),
 		},
 		{
 			true,
-			"http://localhost:6380/LPUSH/OK",
+			"http://localhost:6380/CMD/OK",
 			"",
-			[]string{"val1", "ЫФ3\n\"\r"},
-			message.NewRequestMulti("LPUSH", []string{"OK"}, [][]byte{[]byte("val1"), []byte("ЫФ3\n\"\r")}),
-			http.StatusOK,
-			message.StatusOk,
+			[]string{"共産主義の幽霊\n\"\r\n'\x00", "", "\r\n\x00"},
+			"CMD",
+			[]string{"OK", "共産主義の幽霊\n\"\r\n'\x00", "", "\r\n\x00"},
+			nil,
 		},
 		{
-			true,
-			"http://localhost:6380/LPUSH/WRONGTYPE",
+			false,
+			"http://localhost:6380/CMD/OK",
 			"",
 			nil,
-			message.NewRequestSingle("LPUSH", []string{"WRONGTYPE"}, []byte("")),
-			http.StatusBadRequest,
-			message.StatusTypeMismatch,
+			"CMD",
+			[]string{"OK", ""},
+			nil,
 		},
 	}
 
-	for _, test := range tests {
-		mockHandler := newMockMessageHandler()
-		s := New("", 0, mockHandler)
-		recorder := httptest.NewRecorder()
-		req := newMockRequest(test.usePost, test.url, test.payload, test.multiPayloads)
-		s.ServeHTTP(recorder, req)
+	for _, tst := range tests {
+		httpRequest := newMockRequest(tst.usePost, tst.url, tst.payload, tst.multiPayloads)
+		request, err := httpserver.ParseRequest(httpRequest)
 
-		// clear request times to avoid nanosecond differences
-		if test.wantMessage != nil {
-			test.wantMessage.Time = time.Time{}
-			mockHandler.lastRequest.Time = time.Time{}
+		if err != tst.wantErr && (err == nil || tst.wantErr == nil || err.Error() != tst.wantErr.Error()) {
+			t.Errorf("%q : err got %q, want %q", tst.url, err, tst.wantErr)
 		}
 
-		if recorder.Code != test.wantHttpStatus {
-			t.Errorf("%q Invalid status code: got %d, want %d", test.url, recorder.Code, test.wantHttpStatus)
-		}
-
-		if diff := deep.Equal(mockHandler.lastRequest, test.wantMessage); diff != nil {
-			t.Errorf(
-				"%q Received message differs from expected: %s \ngot: %s \nwant: %s",
-				test.url,
-				diff,
-				mockHandler.lastRequest,
-				test.wantMessage,
-			)
-		}
-
-		if test.wantMessage == nil {
-			// SKIP any further checks due to HandleMessage() wasn't invoked
+		if err != nil {
+			//skip other checks if parsed with errors
 			continue
 		}
 
-		if recorder.Header().Get(StatusHeader) != test.wantRadishStatus.String() {
-			t.Errorf(
-				"%q Invalid radish status code: got %q, want %q",
-				test.url,
-				recorder.Header().Get(StatusHeader),
-				test.wantRadishStatus.String(),
-			)
+		if request.Cmd != tst.wantCmd {
+			t.Errorf("%q CMD got: %q  want: %q", tst.url, request.Cmd, tst.wantCmd)
 		}
 
-		if len(test.multiPayloads) > 0 {
-			multiPayloads, err := praseMultipartResponse(recorder)
-			if err != nil {
-				t.Errorf("%q Unable to parse multipart response: %s", test.url, err.Error())
-			}
-
-			if diff := deep.Equal(multiPayloads, mockHandler.responseMultiPayloads); diff != nil {
-				t.Errorf(
-					"%q Invalid payload : %s\n\ngot: %q\n\nwant: %q",
-					test.url,
-					diff,
-					multiPayloads,
-					mockHandler.responseMultiPayloads,
-				)
-			}
-		} else {
-			if recorder.Body.String() != mockHandler.responseSinglePayload {
-				t.Errorf(
-					"%q Invalid payload : %q != %q",
-					test.url,
-					recorder.Body.String(),
-					mockHandler.responseSinglePayload,
-				)
-			}
+		stringArgs := bytesSliceToStringsSlice(request.Args)
+		if diff := deep.Equal(stringArgs, tst.wantArgs); diff != nil {
+			t.Errorf(
+				"%q Args differs from expected: %s \ngot: %s \nwant: %s",
+				tst.url,
+				diff,
+				stringArgs,
+				tst.wantArgs,
+			)
 		}
 	}
 }
@@ -248,4 +227,22 @@ func praseMultipartResponse(r *httptest.ResponseRecorder) (result []string, err 
 		result = append(result, string(payload))
 	}
 	return result, nil
+}
+
+func stringsSliceToBytesSlise(s []string) [][]byte {
+	result := make([][]byte, len(s))
+	for i, v := range s {
+		result[i] = []byte(v)
+	}
+
+	return result
+}
+
+func bytesSliceToStringsSlice(b [][]byte) []string {
+	result := make([]string, len(b))
+	for i, v := range b {
+		result[i] = string(v)
+	}
+
+	return result
 }

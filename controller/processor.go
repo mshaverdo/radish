@@ -7,6 +7,7 @@ import (
 )
 
 //TODO: use go generate!
+//TODO: проверить, чтобы в режиме resp-клиента Notfound ошибки возвращались корректон для КАЖДОЙ команды (где на до -- nil, где надо -- пустой список)
 
 type Processor struct {
 	core Core
@@ -27,7 +28,7 @@ func (p *Processor) Process(request *message.Request) *message.Response {
 
 		result := p.core.Keys(arg0)
 
-		return getResponseMultiStringPayload(result)
+		return getResponseStringSlicePayload(stringsSliceToBytesSlise(result))
 	case "GET":
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
@@ -39,16 +40,21 @@ func (p *Processor) Process(request *message.Request) *message.Response {
 			return getResponseCommandError(request.Cmd, err)
 		}
 
-		return getResponseSinglePayload(result)
+		return getResponseStringPayload(result)
 	case "SET":
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
 		}
 
-		p.core.Set(arg0, request.Payload)
+		arg1, err := request.GetArgumentBytes(1)
+		if err != nil {
+			return getResponseInvalidArguments(request.Cmd, err)
+		}
 
-		return getResponseEmptyPayload()
+		p.core.Set(arg0, arg1)
+
+		return getResponseStatusOkPayload()
 	case "SETEX":
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
@@ -58,10 +64,14 @@ func (p *Processor) Process(request *message.Request) *message.Response {
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
 		}
+		arg2, err := request.GetArgumentBytes(2)
+		if err != nil {
+			return getResponseInvalidArguments(request.Cmd, err)
+		}
 
-		p.core.SetEx(arg0, arg1, request.Payload)
+		p.core.SetEx(arg0, arg1, arg2)
 
-		return getResponseEmptyPayload()
+		return getResponseStatusOkPayload()
 	case "DEL":
 		args, err := request.GetArgumentVariadicString(0)
 		if err != nil {
@@ -86,7 +96,7 @@ func (p *Processor) Process(request *message.Request) *message.Response {
 			return getResponseCommandError(request.Cmd, err)
 		}
 
-		return getResponseMultiStringPayload(result)
+		return getResponseStringSlicePayload(stringsSliceToBytesSlise(result))
 	case "DGETALL":
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
@@ -98,7 +108,7 @@ func (p *Processor) Process(request *message.Request) *message.Response {
 			return getResponseCommandError(request.Cmd, err)
 		}
 
-		return getResponseMultiPayload(result)
+		return getResponseStringSlicePayload(result)
 
 	case "DGET":
 		arg0, err := request.GetArgumentString(0)
@@ -115,7 +125,7 @@ func (p *Processor) Process(request *message.Request) *message.Response {
 			return getResponseCommandError(request.Cmd, err)
 		}
 
-		return getResponseSinglePayload(result)
+		return getResponseStringPayload(result)
 	case "DSET":
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
@@ -125,8 +135,12 @@ func (p *Processor) Process(request *message.Request) *message.Response {
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
 		}
+		arg2, err := request.GetArgumentBytes(2)
+		if err != nil {
+			return getResponseInvalidArguments(request.Cmd, err)
+		}
 
-		count, err := p.core.DSet(arg0, arg1, request.Payload)
+		count, err := p.core.DSet(arg0, arg1, arg2)
 		if err != nil {
 			return getResponseCommandError(request.Cmd, err)
 		}
@@ -179,7 +193,7 @@ func (p *Processor) Process(request *message.Request) *message.Response {
 			return getResponseCommandError(request.Cmd, err)
 		}
 
-		return getResponseMultiPayload(result)
+		return getResponseStringSlicePayload(result)
 	case "LINDEX":
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
@@ -195,7 +209,7 @@ func (p *Processor) Process(request *message.Request) *message.Response {
 			return getResponseCommandError(request.Cmd, err)
 		}
 
-		return getResponseSinglePayload(result)
+		return getResponseStringPayload(result)
 	case "LSET":
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
@@ -205,20 +219,28 @@ func (p *Processor) Process(request *message.Request) *message.Response {
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
 		}
+		arg2, err := request.GetArgumentBytes(2)
+		if err != nil {
+			return getResponseInvalidArguments(request.Cmd, err)
+		}
 
-		err = p.core.LSet(arg0, arg1, request.Payload)
+		err = p.core.LSet(arg0, arg1, arg2)
 		if err != nil {
 			return getResponseCommandError(request.Cmd, err)
 		}
 
-		return getResponseEmptyPayload()
+		return getResponseStatusOkPayload()
 	case "LPUSH":
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
 		}
+		arg1, err := request.GetArgumentVariadicBytes(1)
+		if err != nil {
+			return getResponseInvalidArguments(request.Cmd, err)
+		}
 
-		count, err := p.core.LPush(arg0, request.MultiPayloads)
+		count, err := p.core.LPush(arg0, arg1)
 		if err != nil {
 			return getResponseCommandError(request.Cmd, err)
 		}
@@ -235,7 +257,7 @@ func (p *Processor) Process(request *message.Request) *message.Response {
 			return getResponseCommandError(request.Cmd, err)
 		}
 
-		return getResponseSinglePayload(result)
+		return getResponseStringPayload(result)
 	case "TTL":
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
@@ -271,9 +293,10 @@ func (p *Processor) Process(request *message.Request) *message.Response {
 
 		return getResponseIntPayload(result)
 	default:
-		return message.NewResponseSingle(
+		return message.NewResponse(
 			message.StatusInvalidCommand,
-			[]byte("Unknown command: "+request.Cmd),
+			message.KindStatus,
+			[][]byte{[]byte("unknown command: " + request.Cmd)},
 		)
 	}
 }
@@ -298,7 +321,7 @@ func (p *Processor) FixRequestTtl(request *message.Request) error {
 		}
 
 		seconds -= int(time.Since(request.Time).Seconds())
-		request.Args[1] = strconv.Itoa(seconds)
+		request.Args[1] = []byte(strconv.Itoa(seconds))
 	}
 
 	return nil

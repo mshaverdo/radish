@@ -84,17 +84,7 @@ func (s *HttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	log.Debugf("Received request: %q", r.URL.EscapedPath())
 
-	mr, err := r.MultipartReader()
-	if err == http.ErrNotMultipart {
-		request, err = parseSinglePayload(r)
-	} else if err == nil {
-		request, err = parseMultiPayload(r, mr)
-	} else {
-		log.Debugf("Error during processing request: %s", err.Error())
-		http.Error(w, "Error during processing request: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
+	request, err := parseRequest(r)
 	if err != nil {
 		log.Debugf("Error during processing request: %s", err.Error())
 		http.Error(w, "Error during processing request: "+err.Error(), http.StatusBadRequest)
@@ -107,49 +97,58 @@ func (s *HttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	log.Debugf("Sending response: %s", response)
 
-	if len(response.MultiPayloads) > 0 {
-		sendMultipartResponse(w, response)
-	} else {
-		httpStatus := getResponseHttpStatus(response)
-		w.Header().Set(StatusHeader, response.Status.String())
-		w.WriteHeader(httpStatus)
-		w.Write(response.Payload)
-	}
+	sendResponse(response, w)
 }
 
-func sendMultipartResponse(w http.ResponseWriter, response *message.Response) {
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	httpStatus := getResponseHttpStatus(response)
+func sendResponse(response *message.Response, w http.ResponseWriter) {
+	var (
+		bodyReader io.Reader
+		err        error
+	)
 
-	for _, val := range response.MultiPayloads {
-		mh := make(textproto.MIMEHeader)
-		mh.Set("Content-Type", "text/plain")
-		partWriter, err := writer.CreatePart(mh)
-		if err != nil {
-			log.Debugf("Error writing multipart response: %s", err.Error())
-			http.Error(w, "Error during processing request: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		_, err = partWriter.Write(val)
-		if err != nil {
-			log.Debugf("Error writing multipart response: %s", err.Error())
-			http.Error(w, "Error during processing request: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
+	if len(response.Payloads) > 1 || response.Kind == message.KindStringSlice {
+		var contentType string
+		bodyReader, contentType, err = assembleMultipartResponse(response)
+		w.Header().Set("Content-Type", contentType)
+	} else if len(response.Payloads) == 1 {
+		bodyReader = bytes.NewReader(response.Payloads[0])
+	} else {
+		bodyReader = bytes.NewReader(nil)
 	}
-	err := writer.Close()
+
 	if err != nil {
 		log.Debugf("Error writing multipart response: %s", err.Error())
 		http.Error(w, "Error during processing request: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	w.Header().Set("Content-Type", writer.FormDataContentType())
 	w.Header().Set(StatusHeader, response.Status.String())
-	w.WriteHeader(httpStatus)
-	io.Copy(w, body)
+	w.WriteHeader(getResponseHttpStatus(response))
+	io.Copy(w, bodyReader)
+}
+
+func assembleMultipartResponse(response *message.Response) (bodyReader io.Reader, contentType string, err error) {
+	bodyBuffer := &bytes.Buffer{}
+	writer := multipart.NewWriter(bodyBuffer)
+
+	for _, val := range response.Payloads {
+		mh := make(textproto.MIMEHeader)
+		mh.Set("Content-Type", "text/plain")
+		partWriter, err := writer.CreatePart(mh)
+		if err != nil {
+			return nil, "", err
+		}
+
+		if _, err = partWriter.Write(val); err != nil {
+			return nil, "", err
+		}
+	}
+	if err = writer.Close(); err != nil {
+		return nil, "", err
+	}
+
+	contentType = writer.FormDataContentType()
+	return bodyBuffer, contentType, nil
 }
 
 func getResponseHttpStatus(r *message.Response) int {
@@ -169,7 +168,7 @@ func getResponseHttpStatus(r *message.Response) int {
 	}
 }
 
-func getCmdArgs(r *http.Request) (cmd string, args []string, err error) {
+func getCmdArgs(r *http.Request) (cmd string, args [][]byte, err error) {
 	urlParts := strings.Split(r.URL.EscapedPath(), "/")
 	if len(urlParts) < 3 {
 		return "", nil, errors.New("min URL parts count is 3")
@@ -180,45 +179,48 @@ func getCmdArgs(r *http.Request) (cmd string, args []string, err error) {
 		return "", nil, err
 	}
 
-	args = make([]string, len(urlParts[2:]))
+	args = make([][]byte, len(urlParts[2:]))
 	for i, v := range urlParts[2:] {
-		if args[i], err = url.PathUnescape(v); err != nil {
+		arg, err := url.PathUnescape(v)
+		if err != nil {
 			return "", nil, err
 		}
+		args[i] = []byte(arg)
 	}
 
 	return cmd, args, nil
 }
 
-// parseMultiPayload parses regular one-part http request and returns message.Request
-func parseSinglePayload(r *http.Request) (req *message.Request, err error) {
-	cmd, args, err := getCmdArgs(r)
-	if err != nil {
-		return nil, err
-	}
-	payload, err := ioutil.ReadAll(r.Body)
-
-	return message.NewRequestSingle(cmd, args, payload), err
-}
-
-// parseMultiPayload parses multipart http request and returns message.Request
-func parseMultiPayload(r *http.Request, mr *multipart.Reader) (req *message.Request, err error) {
-	cmd, args, err := getCmdArgs(r)
+// parseRequest parses http request and returns message.Request
+func parseRequest(httpRequest *http.Request) (*message.Request, error) {
+	cmd, args, err := getCmdArgs(httpRequest)
 	if err != nil {
 		return nil, err
 	}
 
-	var multiPayload [][]byte
-	for p, err := mr.NextPart(); err == nil; p, err = mr.NextPart() {
-		payload, err := ioutil.ReadAll(p)
+	var payload [][]byte
+	mr, err := httpRequest.MultipartReader()
+	if err == nil {
+		for p, err := mr.NextPart(); err == nil; p, err = mr.NextPart() {
+			part, err := ioutil.ReadAll(p)
+			if err != nil {
+				return nil, err
+			}
 
-		if err != nil {
-			log.Debugf("Error reading part: %s...", err.Error())
-			return nil, err
+			payload = append(payload, part)
 		}
 
-		multiPayload = append(multiPayload, payload)
+	} else if err == http.ErrNotMultipart {
+		payload = make([][]byte, 1)
+		payload[0], err = ioutil.ReadAll(httpRequest.Body)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		return nil, err
 	}
 
-	return message.NewRequestMulti(cmd, args, multiPayload), nil
+	args = append(args, payload...)
+
+	return message.NewRequest(cmd, args), nil
 }

@@ -9,7 +9,11 @@ import (
 )
 
 func getResponseInvalidArguments(cmd string, err error) *message.Response {
-	return message.NewResponseSingle(message.StatusInvalidArguments, []byte(cmd+": "+err.Error()))
+	return message.NewResponse(
+		message.StatusInvalidArguments,
+		message.KindStatus,
+		[][]byte{[]byte(cmd + ": " + err.Error())},
+	)
 }
 
 func getResponseCommandError(cmd string, err error) *message.Response {
@@ -24,47 +28,50 @@ func getResponseCommandError(cmd string, err error) *message.Response {
 	status, ok := statusMap[err]
 	assert.True(ok, "unknown error: "+err.Error())
 
-	return message.NewResponseSingle(
+	return message.NewResponse(
 		status,
-		[]byte(fmt.Sprintf("Error processing %q: %q", cmd, err.Error())),
+		message.KindStatus,
+		[][]byte{[]byte(fmt.Sprintf("Error processing %q: %q", cmd, err.Error()))},
 	)
 }
 
-func getResponseSinglePayload(payload []byte) *message.Response {
-	return message.NewResponseSingle(
+func getResponseStringPayload(payload []byte) *message.Response {
+	return message.NewResponse(
 		message.StatusOk,
-		payload,
-	)
-}
-
-func getResponseEmptyPayload() *message.Response {
-	return message.NewResponseSingle(
-		message.StatusOk,
-		nil,
+		message.KindString,
+		[][]byte{payload},
 	)
 }
 
 func getResponseIntPayload(value int) *message.Response {
-	return message.NewResponseSingle(
+	return message.NewResponse(
 		message.StatusOk,
-		[]byte(strconv.Itoa(value)),
+		message.KindInt,
+		[][]byte{[]byte(strconv.Itoa(value))},
 	)
 }
 
-func getResponseMultiPayload(payloads [][]byte) *message.Response {
-	return message.NewResponseMulti(
+func getResponseStringSlicePayload(payloads [][]byte) *message.Response {
+	return message.NewResponse(
 		message.StatusOk,
+		message.KindStringSlice,
 		payloads,
 	)
 }
 
-func getResponseMultiStringPayload(payloads []string) *message.Response {
-	bytesPayloads := make([][]byte, len(payloads))
-	for i, v := range payloads {
-		bytesPayloads[i] = []byte(v)
-	}
-	return message.NewResponseMulti(
+func getResponseStatusOkPayload() *message.Response {
+	return message.NewResponse(
 		message.StatusOk,
-		bytesPayloads,
+		message.KindStatus,
+		nil,
 	)
+}
+
+func stringsSliceToBytesSlise(s []string) [][]byte {
+	result := make([][]byte, len(s))
+	for i, v := range s {
+		result[i] = []byte(v)
+	}
+
+	return result
 }
