@@ -81,23 +81,24 @@ func (p *Processor) Process(request *message.Request) message.Response {
 		result := p.core.Del(args)
 
 		return getResponseIntPayload(result)
-	case "DKEYS":
+	case "HKEYS":
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
 		}
 		arg1, err := request.GetArgumentString(1)
 		if err != nil {
-			return getResponseInvalidArguments(request.Cmd, err)
+			//TODO: fixme in core
+			// Oops. pattern isn't available in redis
+			arg1 = "*"
 		}
-
 		result, err := p.core.DKeys(arg0, arg1)
 		if err != nil {
 			return getResponseCommandError(request.Cmd, err)
 		}
 
 		return getResponseStringSlicePayload(stringsSliceToBytesSlise(result))
-	case "DGETALL":
+	case "HGETALL":
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
@@ -110,7 +111,7 @@ func (p *Processor) Process(request *message.Request) message.Response {
 
 		return getResponseStringSlicePayload(result)
 
-	case "DGET":
+	case "HGET":
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
@@ -126,7 +127,7 @@ func (p *Processor) Process(request *message.Request) message.Response {
 		}
 
 		return getResponseStringPayload(result)
-	case "DSET":
+	case "HSET":
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
@@ -146,7 +147,7 @@ func (p *Processor) Process(request *message.Request) message.Response {
 		}
 
 		return getResponseIntPayload(count)
-	case "DDEL":
+	case "HDEL":
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
@@ -300,7 +301,7 @@ func (p *Processor) Process(request *message.Request) message.Response {
 // IsModifyingRequest returns true, if request modifies a storage
 func (p *Processor) IsModifyingRequest(request *message.Request) bool {
 	switch request.Cmd {
-	case "SET", "SETEX", "DEL", "DSET", "DDEL", "LSET", "LPUSH", "LPOP", "EXPIRE", "PERSIST":
+	case "SET", "SETEX", "DEL", "HSET", "HDEL", "LSET", "LPUSH", "LPOP", "EXPIRE", "PERSIST":
 		return true
 	default:
 		return false

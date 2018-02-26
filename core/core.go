@@ -232,6 +232,7 @@ func (c *Core) DGet(key, field string) (result []byte, err error) {
 }
 
 // Returns all field names in the dict stored at key.
+//TODO: remove argument "pattern" -- it isn't available in REDIS
 func (c *Core) DKeys(key, pattern string) (result []string, err error) {
 	item := c.getItem(key)
 	if item == nil {

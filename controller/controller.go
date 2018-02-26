@@ -3,6 +3,7 @@ package controller
 import (
 	"errors"
 	"github.com/mshaverdo/radish/controller/httpserver"
+	"github.com/mshaverdo/radish/controller/respserver"
 	"github.com/mshaverdo/radish/core"
 	"github.com/mshaverdo/radish/log"
 	"github.com/mshaverdo/radish/message"
@@ -119,6 +120,7 @@ func New(
 	dataDir string,
 	syncPolicy SyncPolicy,
 	collectInterval, mergeWalInterval time.Duration,
+	useHttp bool,
 ) *Controller {
 	c := Controller{
 		host:                   host,
@@ -130,7 +132,12 @@ func New(
 		isPersistent:           dataDir != "",
 	}
 
-	c.srv = httpserver.New(host, port, &c)
+	if useHttp {
+		c.srv = httpserver.New(host, port, &c)
+	} else {
+		c.srv = respserver.New(host, port, &c)
+	}
+
 	c.processor = NewProcessor(c.core)
 
 	if c.isPersistent {

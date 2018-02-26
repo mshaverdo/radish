@@ -80,7 +80,7 @@ func (c *Client) Del(keys ...string) *IntResult {
 
 // HSet Sets field in the hash stored at key to value.
 func (c *Client) HSet(key, field string, value interface{}) *BoolResult {
-	url := c.getUrl("DSET", key, field)
+	url := c.getUrl("HSET", key, field)
 
 	bytesValue, err := convertToBytes(value)
 	if err != nil {
@@ -93,14 +93,14 @@ func (c *Client) HSet(key, field string, value interface{}) *BoolResult {
 
 // HGetAll Returns all fields and values of the hash stored at key.
 func (c *Client) HGetAll(key string) *StringStringMapResult {
-	url := c.getUrl("DGETALL", key)
+	url := c.getUrl("HGETALL", key)
 	payload, err := c.requestSingleMulti(false, url, nil)
 	return newStringStringMapResult(payload, err)
 }
 
 // HKeys Returns all field names in the dict stored at key.
 func (c *Client) HKeys(key string) *StringSliceResult {
-	url := c.getUrl("DKEYS", key, "*")
+	url := c.getUrl("HKEYS", key, "*")
 	payload, err := c.requestSingleMulti(false, url, nil)
 	return newStringSliceResult(payload, err)
 }
@@ -110,14 +110,14 @@ func (c *Client) HDel(key string, fields ...string) *IntResult {
 	args := make([]string, len(fields)+1)
 	args[0] = key
 	copy(args[1:], fields)
-	url := c.getUrl("DDEL", args...)
+	url := c.getUrl("HDEL", args...)
 	payload, err := c.requestSingleSingle(true, url, nil)
 	return newIntResult(payload, err)
 }
 
 // HGet Returns the value associated with field in the dict stored at key.
 func (c *Client) HGet(key, field string) *StringResult {
-	url := c.getUrl("DGET", key, field)
+	url := c.getUrl("HGET", key, field)
 	payload, err := c.requestSingleSingle(false, url, nil)
 	return newStringResult(payload, err)
 

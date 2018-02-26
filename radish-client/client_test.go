@@ -12,6 +12,8 @@ import (
 )
 
 //TODO: clean & refactor!
+//TODO: переименовать в интеграционный тест
+//TODO: добавить тестирование RESP протокола
 var _ = redis.Nil
 var _ = controller.Controller{}
 var _ = log.CRITICAL
@@ -26,20 +28,31 @@ type TestCase struct {
 }
 
 func TestClient(t *testing.T) {
-	//*
+	//////////////  Get REDIS Gauge values  ///////////
+	//cl := redis.NewClient(&redis.Options{
+	//	Addr: "localhost:6379",
+	//})
+	////cl.FlushDB() //flush DB to generate expected results
+	//notFound = redis.Nil
+
+	//////////////  test Radish HTTP API  ///////////
+	//log.SetLevel(log.CRITICAL)
+	//go controller.New("", 6381, "", 0, 0, 0, true).ListenAndServe()
+	//time.Sleep(500 * time.Millisecond) // wait to ensure, that controller started
+	//
+	//cl := NewClient("localhost", 6381)
+	//notFound = ErrNotFound
+
+	//////////////  test Radish RESP API  ///////////
 	log.SetLevel(log.CRITICAL)
-	go controller.New("", 6381, "", 0, 0, 0).ListenAndServe()
+	go controller.New("", 6381, "", 0, 0, 0, false).ListenAndServe()
 	time.Sleep(500 * time.Millisecond) // wait to ensure, that controller started
 
-	cl := NewClient("localhost", 6381)
-	notFound = ErrNotFound
-	/*/
 	cl := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+		Addr: "localhost:6381",
 	})
 	//cl.FlushDB() //flush DB to generate expected results
 	notFound = redis.Nil
-	//*/
 
 	fmt.Printf("Using %T\n", cl)
 
@@ -57,7 +70,7 @@ func TestClient(t *testing.T) {
 
 	//////////////////////////////////////////////////////
 	tests = []TestCase{
-		{[]string{"key1", "val1!"}, `Set(["key1" "val1!"]): OK`, `Set(["key1" "val1!"]): val1!`},
+		{[]string{"key/1", "val1!"}, `Set(["key/1" "val1!"]): OK`, `Set(["key/1" "val1!"]): val1!`},
 		{[]string{"key2", "!!!"}, `Set(["key2" "!!!"]): OK`, `Set(["key2" "!!!"]): !!!`},
 		{[]string{"key2", "val2!"}, `Set(["key2" "val2!"]): OK`, `Set(["key2" "val2!"]): val2!`},
 	}
@@ -86,7 +99,7 @@ func TestClient(t *testing.T) {
 
 	//////////////////////////////////////////////////////
 	tests = []TestCase{
-		{[]string{"*"}, `Keys(["*"]): [dict key1 key2 list]`, ``},
+		{[]string{"*"}, `Keys(["*"]): [dict key/1 key2 list]`, ``},
 	}
 	cmd = "Keys"
 	fnc = func(v TestCase) (interface{}, error) { return cl.Keys(v.a[0]).Result() }
@@ -94,7 +107,7 @@ func TestClient(t *testing.T) {
 
 	//////////////////////////////////////////////////////
 	tests = []TestCase{
-		{[]string{"key1"}, `Get(["key1"]): val1!`, ``},
+		{[]string{"key/1"}, `Get(["key/1"]): val1!`, ``},
 		{[]string{"dict"}, `Error during Get(["dict"]): "radish: ErrTypeMismatch"`, ``},
 		{[]string{"404"}, `Get(["404"]) Not Found!`, ``},
 	}
@@ -104,7 +117,7 @@ func TestClient(t *testing.T) {
 
 	//////////////////////////////////////////////////////
 	tests = []TestCase{
-		{[]string{"404", "key2"}, `Del(["404" "key2"]): 1`, `Del(["404" "key2"]): [dict key1 list]`},
+		{[]string{"404", "key2"}, `Del(["404" "key2"]): 1`, `Del(["404" "key2"]): [dict key/1 list]`},
 	}
 	cmd = "Del"
 	fnc = func(v TestCase) (interface{}, error) { return cl.Del(v.a[0], v.a[1]).Result() }
@@ -114,7 +127,7 @@ func TestClient(t *testing.T) {
 	tests = []TestCase{
 		{[]string{"dict"}, `HKeys(["dict"]): [f1 f2]`, ``},
 		{[]string{"404"}, `HKeys(["404"]): []`, ``},
-		{[]string{"key1"}, `Error during HKeys(["key1"]): "radish: ErrTypeMismatch"`, ``},
+		{[]string{"key/1"}, `Error during HKeys(["key/1"]): "radish: ErrTypeMismatch"`, ``},
 	}
 	cmd = "HKeys"
 	fnc = func(v TestCase) (interface{}, error) { return cl.HKeys(v.a[0]).Result() }
@@ -124,7 +137,7 @@ func TestClient(t *testing.T) {
 	tests = []TestCase{
 		{[]string{"dict"}, `HGetAll(["dict"]): [f1: val1 f2: val2]`, ``},
 		{[]string{"404"}, `HGetAll(["404"]): []`, ``},
-		{[]string{"key1"}, `Error during HGetAll(["key1"]): "radish: ErrTypeMismatch"`, ``},
+		{[]string{"key/1"}, `Error during HGetAll(["key/1"]): "radish: ErrTypeMismatch"`, ``},
 	}
 	cmd = "HGetAll"
 	fnc = func(v TestCase) (interface{}, error) { return cl.HGetAll(v.a[0]).Result() }
@@ -134,7 +147,7 @@ func TestClient(t *testing.T) {
 	tests = []TestCase{
 		{[]string{"dict", "f1"}, `HDel(["dict" "f1"]): 1`, `HDel(["dict" "f1"]): [f2: val2]`},
 		{[]string{"404", "f1"}, `HDel(["404" "f1"]): 0`, `HDel(["404" "f1"]): []`},
-		{[]string{"key1", "f1"}, `Error during HDel(["key1" "f1"]): "radish: ErrTypeMismatch"`, `Error during HDel(["key1" "f1"]): "radish: ErrTypeMismatch"`},
+		{[]string{"key/1", "f1"}, `Error during HDel(["key/1" "f1"]): "radish: ErrTypeMismatch"`, `Error during HDel(["key/1" "f1"]): "radish: ErrTypeMismatch"`},
 	}
 	cmd = "HDel"
 	fnc = func(v TestCase) (interface{}, error) { return cl.HDel(v.a[0], v.a[1]).Result() }
@@ -143,7 +156,7 @@ func TestClient(t *testing.T) {
 	//////////////////////////////////////////////////////
 	tests = []TestCase{
 		{[]string{"dict", "f2"}, `HGet(["dict" "f2"]): val2`, ``},
-		{[]string{"key1", "f2"}, `Error during HGet(["key1" "f2"]): "radish: ErrTypeMismatch"`, ``},
+		{[]string{"key/1", "f2"}, `Error during HGet(["key/1" "f2"]): "radish: ErrTypeMismatch"`, ``},
 		{[]string{"404", "f2"}, `HGet(["404" "f2"]) Not Found!`, ``},
 	}
 	cmd = "HGet"
@@ -153,7 +166,7 @@ func TestClient(t *testing.T) {
 	//////////////////////////////////////////////////////
 	tests = []TestCase{
 		{[]string{"list"}, `LLen(["list"]): 2`, ``},
-		{[]string{"key1"}, `Error during LLen(["key1"]): "radish: ErrTypeMismatch"`, ``},
+		{[]string{"key/1"}, `Error during LLen(["key/1"]): "radish: ErrTypeMismatch"`, ``},
 		{[]string{"404"}, `LLen(["404"]): 0`, ``},
 	}
 	cmd = "LLen"
@@ -163,7 +176,7 @@ func TestClient(t *testing.T) {
 	//////////////////////////////////////////////////////
 	tests = []TestCase{
 		{[]string{"list"}, `LRange(["list"]): [val1! val2!]`, ``},
-		{[]string{"key1"}, `Error during LRange(["key1"]): "radish: ErrTypeMismatch"`, ``},
+		{[]string{"key/1"}, `Error during LRange(["key/1"]): "radish: ErrTypeMismatch"`, ``},
 		{[]string{"404"}, `LRange(["404"]): []`, ``},
 	}
 	cmd = "LRange"
@@ -173,7 +186,7 @@ func TestClient(t *testing.T) {
 	//////////////////////////////////////////////////////
 	tests = []TestCase{
 		{[]string{"list"}, `LIndex(["list"]): val2!`, ``},
-		{[]string{"key1"}, `Error during LIndex(["key1"]): "radish: ErrTypeMismatch"`, ``},
+		{[]string{"key/1"}, `Error during LIndex(["key/1"]): "radish: ErrTypeMismatch"`, ``},
 		{[]string{"404"}, `LIndex(["404"]) Not Found!`, ``},
 	}
 	cmd = "LIndex"
@@ -185,7 +198,7 @@ func TestClient(t *testing.T) {
 	//////////////////////////////////////////////////////
 	tests = []TestCase{
 		{[]string{"list", "new val"}, `LSet(["list" "new val"]): OK`, `LSet(["list" "new val"]): [new val val1!]`},
-		{[]string{"key1", ""}, `Error during LSet(["key1" ""]): "radish: ErrTypeMismatch"`, `Error during LSet(["key1" ""]): "radish: ErrTypeMismatch"`},
+		{[]string{"key/1", ""}, `Error during LSet(["key/1" ""]): "radish: ErrTypeMismatch"`, `Error during LSet(["key/1" ""]): "radish: ErrTypeMismatch"`},
 		{[]string{"404", ""}, `LSet(["404" ""]) Not Found!`, `LSet(["404" ""]): []`},
 	}
 	cmd = "LSet"
@@ -197,7 +210,7 @@ func TestClient(t *testing.T) {
 	//////////////////////////////////////////////////////
 	tests = []TestCase{
 		{[]string{"list"}, `LPop(["list"]): new val`, `LPop(["list"]): [val1!]`},
-		{[]string{"key1"}, `Error during LPop(["key1"]): "radish: ErrTypeMismatch"`, `Error during LPop(["key1"]): "radish: ErrTypeMismatch"`},
+		{[]string{"key/1"}, `Error during LPop(["key/1"]): "radish: ErrTypeMismatch"`, `Error during LPop(["key/1"]): "radish: ErrTypeMismatch"`},
 		{[]string{"404"}, `LPop(["404"]) Not Found!`, `LPop(["404"]): []`},
 	}
 	cmd = "LPop"
@@ -206,7 +219,7 @@ func TestClient(t *testing.T) {
 
 	//////////////////////////////////////////////////////
 	tests = []TestCase{
-		{[]string{"key1"}, `TTL(["key1"]): -1s`, ``},
+		{[]string{"key/1"}, `TTL(["key/1"]): -1s`, ``},
 		{[]string{"404"}, `TTL(["404"]): -2s`, ``},
 	}
 	cmd = "TTL"
@@ -215,7 +228,7 @@ func TestClient(t *testing.T) {
 
 	//////////////////////////////////////////////////////
 	tests = []TestCase{
-		{[]string{"key1", "5"}, `Expire(["key1" "5"]): OK`, `Expire(["key1" "5"]): 5s`},
+		{[]string{"key/1", "5"}, `Expire(["key/1" "5"]): OK`, `Expire(["key/1" "5"]): 5s`},
 		{[]string{"dict", "0"}, `Expire(["dict" "0"]): OK`, `Expire(["dict" "0"]): -2s`},
 		{[]string{"list", "-1"}, `Expire(["list" "-1"]): OK`, `Expire(["list" "-1"]): -2s`},
 		{[]string{"404", "0"}, `Expire(["404" "0"]): FAIL`, `Expire(["404" "0"]): -2s`},
@@ -228,7 +241,7 @@ func TestClient(t *testing.T) {
 	t.Run(cmd, func(t *testing.T) { processTest(t, cmd, fnc, getDataTtl, tests) })
 
 	tests = []TestCase{
-		{[]string{"key1"}, `Persist(["key1"]): OK`, `Persist(["key1"]): -1s`},
+		{[]string{"key/1"}, `Persist(["key/1"]): OK`, `Persist(["key/1"]): -1s`},
 		{[]string{"dict"}, `Persist(["dict"]): FAIL`, `Persist(["dict"]): -2s`},
 		{[]string{"404"}, `Persist(["404"]): FAIL`, `Persist(["404"]): -2s`},
 	}

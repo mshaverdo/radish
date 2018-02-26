@@ -38,9 +38,15 @@
   revision = "572520ed46dbddaed19ea3d9541bdd0494163693"
   version = "v0.1"
 
+[[projects]]
+  branch = "master"
+  name = "github.com/tidwall/redcon"
+  packages = ["."]
+  revision = "b6e65d498dd66e3919b2eb74364094c804f13567"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "d422aaa95b1f8d2cb38f54e1182b4cb72e0cc33e5d4fcacad5cfda5b7413823e"
+  inputs-digest = "3566fb359cbdb1747654ccc607beef4355e9a0dfd8f44b1931ee236cd739012b"
   solver-name = "gps-cdcl"
   solver-version = 1

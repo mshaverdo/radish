@@ -18,6 +18,10 @@ func init() {
 	assert.Enabled = (assertionEnabled == "1")
 }
 
+//TODO: сделать все тесты внешними pkgname_test
+//TODO: in tests rename v -> tst
+//TODO: добавить описание опции -http в README. Написать, что основной режим -- RESP, дополнительный HTTP
+
 func main() {
 	var (
 		host, dataDir               string
@@ -27,6 +31,7 @@ func main() {
 		syncPolicy                  int
 		quiet, verbose, veryVerbose bool
 		cpuProfile                  string
+		useHttp                     bool
 	)
 
 	flag.StringVar(&host, "h", "", "The listening host.")
@@ -39,6 +44,7 @@ func main() {
 	flag.BoolVar(&verbose, "v", false, "Enable verbose logging.")
 	flag.BoolVar(&quiet, "q", false, "Quiet logging. Totally silent.")
 	flag.BoolVar(&veryVerbose, "vv", false, "Enable very verbose logging.")
+	flag.BoolVar(&useHttp, "http", false, "Use HTTP API")
 	flag.Parse()
 
 	//TODO: disable in production
@@ -69,6 +75,7 @@ func main() {
 		controller.SyncPolicy(syncPolicy),
 		time.Duration(collectInterval)*time.Second,
 		time.Duration(mergeWalInterval)*time.Second,
+		useHttp,
 	)
 
 	go handleSignals(c)

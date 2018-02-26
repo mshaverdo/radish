@@ -44,3 +44,7 @@
 [[constraint]]
   branch = "master"
   name = "github.com/mshaverdo/assert"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/tidwall/redcon"
