@@ -218,7 +218,7 @@ func (k *Keeper) processWal(filename string) error {
 		}
 
 		resp := k.processor.Process(req)
-		if resp.Status != message.StatusOk {
+		if resp.Status() != message.StatusOk {
 			// we got an error, but this request was successful. Something went wrong
 			return fmt.Errorf("Keeper.processWal(): can't process %s: \nrequest: %s \nresponse: %s", filename, req, resp)
 		}

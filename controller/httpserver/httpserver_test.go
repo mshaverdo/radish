@@ -23,75 +23,75 @@ func init() {
 
 func TestHttpServer_SendResponse(t *testing.T) {
 	var tests = []struct {
-		messageStatus  message.Status
-		payloads       []string
-		kind           message.ResponseKind
+		response       message.Response
 		wantHttpStatus int
 	}{
 		{
-			message.StatusOk,
-			[]string{"共産主義の幽霊\n\"\r\n'\x00"},
-			message.KindString,
+			message.NewResponseStatus(message.StatusOk, "共産主義の幽霊\n\"\r\n'\x00"),
 			http.StatusOK,
 		},
 		{
-			message.StatusOk,
-			[]string{"共産主義の幽霊\n\"\r\n'\x00"},
-			message.KindStringSlice,
-			http.StatusOK,
-		},
-		{
-			message.StatusNotFound,
-			nil,
-			message.KindString,
+			message.NewResponseStatus(message.StatusNotFound, "共産主義の幽霊\n\"\r\n'\x00"),
 			http.StatusNotFound,
 		},
 		{
-			message.StatusError,
-			[]string{"共産主義の幽霊\n\"\r\n'\x00", "", "\r\n\x00"},
-			message.KindStringSlice,
+			message.NewResponseStatus(message.StatusError, "共産主義の幽霊\n\"\r\n'\x00"),
 			http.StatusInternalServerError,
+		},
+		{
+			message.NewResponseStatus(message.StatusInvalidCommand, "共産主義の幽霊\n\"\r\n'\x00"),
+			http.StatusBadRequest,
+		},
+		{
+			message.NewResponseInt(message.StatusOk, 42),
+			http.StatusOK,
+		},
+		{
+			message.NewResponseString(message.StatusOk, []byte("共産主義の幽霊\n\"\r\n'\x00")),
+			http.StatusOK,
+		},
+		{
+			message.NewResponseStringSlice(message.StatusOk, [][]byte{[]byte("共産主義の幽霊\n\"\r\n'\x00"), []byte("\x00")}),
+			http.StatusOK,
 		},
 	}
 
 	for n, tst := range tests {
-		var response *message.Response
-		response = message.NewResponse(tst.messageStatus, tst.kind, stringsSliceToBytesSlise(tst.payloads))
-
 		recorder := httptest.NewRecorder()
-		httpserver.SendResponse(response, recorder)
+		httpserver.SendResponse(tst.response, recorder)
 
 		if recorder.Code != tst.wantHttpStatus {
-			t.Errorf("testcase %d: %q Invalid status code: got %d, want %d", n, tst.messageStatus, recorder.Code, tst.wantHttpStatus)
+			t.Errorf("testcase %d: %q Invalid status code: got %d, want %d", n, tst.response.Status(), recorder.Code, tst.wantHttpStatus)
 		}
 
-		if recorder.Header().Get(httpserver.StatusHeader) != tst.messageStatus.String() {
+		if recorder.Header().Get(httpserver.StatusHeader) != tst.response.Status().String() {
 			t.Errorf(
 				"testcase %d: Invalid radish status code: got %q, want %q",
 				n,
 				recorder.Header().Get(httpserver.StatusHeader),
-				tst.messageStatus.String(),
+				tst.response.Status().String(),
 			)
 		}
 
-		if tst.kind == message.KindStringSlice {
+		if len(tst.response.Bytes()) > 1 {
 			multiPayloads, err := praseMultipartResponse(recorder)
 			if err != nil {
 				t.Errorf("testcase %d: Unable to parse multipart response: %s", n, err.Error())
 			}
 
-			if diff := deep.Equal(multiPayloads, tst.payloads); diff != nil {
+			strPayloads := bytesSliceToStringsSlice(tst.response.Bytes())
+			if diff := deep.Equal(multiPayloads, strPayloads); diff != nil {
 				t.Errorf(
 					"testcase %d: Invalid payload : %s\n\ngot: %q\n\nwant: %q",
 					n,
 					diff,
 					multiPayloads,
-					tst.payloads,
+					strPayloads,
 				)
 			}
-		} else if len(tst.payloads) == 1 {
-			if recorder.Body.String() != tst.payloads[0] {
-				t.Errorf("testcase %d: Invalid payload : %q != %q", n, recorder.Body.String(), tst.payloads[0])
+		} else if len(tst.response.Bytes()) == 1 {
+			if recorder.Body.String() != string(tst.response.Bytes()[0]) {
+				t.Errorf("testcase %d: Invalid payload : %q != %q", n, recorder.Body.String(), tst.response.Bytes()[0])
 			}
 		}
 	}

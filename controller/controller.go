@@ -189,7 +189,7 @@ func (c *Controller) Shutdown() {
 }
 
 // HandleMessage processes Request and return Response
-func (c *Controller) HandleMessage(request *message.Request) *message.Response {
+func (c *Controller) HandleMessage(request *message.Request) message.Response {
 	if !c.isRunning() {
 		return getResponseCommandError(request.Cmd, ErrServerShutdown)
 	}
@@ -200,7 +200,7 @@ func (c *Controller) HandleMessage(request *message.Request) *message.Response {
 
 	response := c.processor.Process(request)
 
-	if c.isPersistent && response.Status == message.StatusOk && c.processor.IsModifyingRequest(request) {
+	if c.isPersistent && response.Status() == message.StatusOk && c.processor.IsModifyingRequest(request) {
 		if err := c.keeper.WriteToWal(request); err != nil {
 			return getResponseCommandError(request.Cmd, err)
 		}

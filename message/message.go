@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+//TODO: change Request to an interface for uniformity with Response
 // Request is a container, represents a Command, parsed from external API interface
 type Request struct {
 	//Time is a message creation time
@@ -97,38 +98,133 @@ const (
 	StatusTypeMismatch
 )
 
-//go:generate stringer -type=ResponseKind
-type ResponseKind int
-
-const (
-	KindStatus ResponseKind = iota
-	KindInt
-	KindString
-	KindStringSlice
-)
-
 // Response is a container, represents a Response to Request Command
-type Response struct {
-	Status   Status
-	Kind     ResponseKind
-	Payloads [][]byte
+type Response interface {
+	fmt.Stringer
+	Bytes() [][]byte
+	Status() Status
 }
 
-// NewResponse constructs new Response object with single payload
-func NewResponse(status Status, kind ResponseKind, payloads [][]byte) *Response {
-	return &Response{Status: status, Kind: kind, Payloads: payloads}
+///////////////////////// ResponseStatus ///////////////////////////////////
+type ResponseStatus struct {
+	status  Status
+	payload string
 }
 
-func (r *Response) String() string {
-	multiPayload := make([]string, len(r.Payloads))
-	for i, v := range r.Payloads {
-		multiPayload[i] = string(v)
-	}
+func NewResponseStatus(status Status, payload string) *ResponseStatus {
+	return &ResponseStatus{status: status, payload: payload}
+}
 
+func (r *ResponseStatus) Payload() string {
+	return r.payload
+}
+
+func (r *ResponseStatus) Status() Status {
+	return r.status
+}
+
+func (r *ResponseStatus) Bytes() [][]byte {
+	return [][]byte{[]byte(r.payload)}
+}
+
+func (r *ResponseStatus) String() string {
 	return fmt.Sprintf(
-		"Response{\n\tStatus: %q \n\tKind: %q \n\tPayloads:%q \n}",
-		r.Status,
-		r.Kind,
-		multiPayload,
+		"ResponseStatus{\n\tStatus: %q \n\tMessage: %q \n}",
+		r.status,
+		r.payload,
+	)
+}
+
+///////////////////////// ResponseInt ///////////////////////////////////
+type ResponseInt struct {
+	status  Status
+	payload int
+}
+
+func NewResponseInt(status Status, payload int) *ResponseInt {
+	return &ResponseInt{status: status, payload: payload}
+}
+
+func (r *ResponseInt) Payload() int {
+	return r.payload
+}
+
+func (r *ResponseInt) Status() Status {
+	return r.status
+}
+
+func (r *ResponseInt) Bytes() [][]byte {
+	return [][]byte{[]byte(strconv.Itoa(r.payload))}
+}
+
+func (r *ResponseInt) String() string {
+	return fmt.Sprintf(
+		"ResponseStatus{\n\tStatus: %q \n\tPayload: %d \n}",
+		r.status,
+		r.payload,
+	)
+}
+
+///////////////////////// ResponseString ///////////////////////////////////
+type ResponseString struct {
+	status  Status
+	payload []byte
+}
+
+func NewResponseString(status Status, payload []byte) *ResponseString {
+	return &ResponseString{status: status, payload: payload}
+}
+
+func (r *ResponseString) Payload() []byte {
+	return r.payload
+}
+
+func (r *ResponseString) Status() Status {
+	return r.status
+}
+
+func (r *ResponseString) Bytes() [][]byte {
+	return [][]byte{r.payload}
+}
+
+func (r *ResponseString) String() string {
+	return fmt.Sprintf(
+		"ResponseStatus{\n\tStatus: %q \n\tPayload: %q \n}",
+		r.status,
+		r.payload,
+	)
+}
+
+///////////////////////// ResponseStringSlice ///////////////////////////////////
+type ResponseStringSlice struct {
+	status  Status
+	payload [][]byte
+}
+
+func NewResponseStringSlice(status Status, payload [][]byte) *ResponseStringSlice {
+	return &ResponseStringSlice{status: status, payload: payload}
+}
+
+func (r *ResponseStringSlice) Payload() [][]byte {
+	return r.payload
+}
+
+func (r *ResponseStringSlice) Status() Status {
+	return r.status
+}
+
+func (r *ResponseStringSlice) Bytes() [][]byte {
+	return r.payload
+}
+
+func (r *ResponseStringSlice) String() string {
+	strPayload := make([]string, len(r.payload))
+	for i, v := range r.payload {
+		strPayload[i] = string(v)
+	}
+	return fmt.Sprintf(
+		"ResponseStatus{\n\tStatus: %q \n\tPayload: %q \n}",
+		r.status,
+		strPayload,
 	)
 }

@@ -18,7 +18,7 @@ func NewProcessor(core Core) *Processor {
 }
 
 // Process processes request to Core
-func (p *Processor) Process(request *message.Request) *message.Response {
+func (p *Processor) Process(request *message.Request) message.Response {
 	switch request.Cmd {
 	case "KEYS":
 		arg0, err := request.GetArgumentString(0)
@@ -293,11 +293,7 @@ func (p *Processor) Process(request *message.Request) *message.Response {
 
 		return getResponseIntPayload(result)
 	default:
-		return message.NewResponse(
-			message.StatusInvalidCommand,
-			message.KindStatus,
-			[][]byte{[]byte("unknown command: " + request.Cmd)},
-		)
+		return message.NewResponseStatus(message.StatusInvalidCommand, "unknown command: "+request.Cmd)
 	}
 }
 

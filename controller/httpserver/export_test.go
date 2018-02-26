@@ -5,7 +5,7 @@ import (
 	"net/http"
 )
 
-func SendResponse(response *message.Response, w http.ResponseWriter) {
+func SendResponse(response message.Response, w http.ResponseWriter) {
 	sendResponse(response, w)
 }
 

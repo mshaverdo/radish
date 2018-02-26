@@ -63,14 +63,12 @@ func parseResponseMulti(r *http.Response) (result [][]byte, err error) {
 	}
 
 	v := r.Header.Get("Content-Type")
-	if v == "" {
-		return nil, errors.New("not a multipart")
-	}
 	d, params, err := mime.ParseMediaType(v)
 	if err != nil || d != "multipart/form-data" {
-		fmt.Printf("%v, %v\n", err, d)
-		return nil, errors.New("not a multipart")
+		body, err := ioutil.ReadAll(r.Body)
+		return [][]byte{body}, err
 	}
+
 	boundary, ok := params["boundary"]
 	if !ok {
 		return nil, errors.New("missing boundary")

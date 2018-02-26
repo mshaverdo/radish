@@ -29,7 +29,7 @@ type HttpServer struct {
 
 // MessageHandler processes a Request message and return a response message
 type MessageHandler interface {
-	HandleMessage(request *message.Request) *message.Response
+	HandleMessage(request *message.Request) message.Response
 }
 
 // New Returns new instance of Radish HTTP server
@@ -79,7 +79,7 @@ func (s *HttpServer) Shutdown() error {
 func (s *HttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var (
 		request  *message.Request
-		response *message.Response
+		response message.Response
 	)
 
 	log.Debugf("Received request: %q", r.URL.EscapedPath())
@@ -100,18 +100,18 @@ func (s *HttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sendResponse(response, w)
 }
 
-func sendResponse(response *message.Response, w http.ResponseWriter) {
+func sendResponse(response message.Response, w http.ResponseWriter) {
 	var (
 		bodyReader io.Reader
 		err        error
 	)
 
-	if len(response.Payloads) > 1 || response.Kind == message.KindStringSlice {
+	if len(response.Bytes()) > 1 {
 		var contentType string
 		bodyReader, contentType, err = assembleMultipartResponse(response)
 		w.Header().Set("Content-Type", contentType)
-	} else if len(response.Payloads) == 1 {
-		bodyReader = bytes.NewReader(response.Payloads[0])
+	} else if len(response.Bytes()) == 1 {
+		bodyReader = bytes.NewReader(response.Bytes()[0])
 	} else {
 		bodyReader = bytes.NewReader(nil)
 	}
@@ -122,16 +122,16 @@ func sendResponse(response *message.Response, w http.ResponseWriter) {
 		return
 	}
 
-	w.Header().Set(StatusHeader, response.Status.String())
+	w.Header().Set(StatusHeader, response.Status().String())
 	w.WriteHeader(getResponseHttpStatus(response))
 	io.Copy(w, bodyReader)
 }
 
-func assembleMultipartResponse(response *message.Response) (bodyReader io.Reader, contentType string, err error) {
+func assembleMultipartResponse(response message.Response) (bodyReader io.Reader, contentType string, err error) {
 	bodyBuffer := &bytes.Buffer{}
 	writer := multipart.NewWriter(bodyBuffer)
 
-	for _, val := range response.Payloads {
+	for _, val := range response.Bytes() {
 		mh := make(textproto.MIMEHeader)
 		mh.Set("Content-Type", "text/plain")
 		partWriter, err := writer.CreatePart(mh)
@@ -151,7 +151,7 @@ func assembleMultipartResponse(response *message.Response) (bodyReader io.Reader
 	return bodyBuffer, contentType, nil
 }
 
-func getResponseHttpStatus(r *message.Response) int {
+func getResponseHttpStatus(r message.Response) int {
 	statusMap := map[message.Status]int{
 		message.StatusOk:               http.StatusOK,
 		message.StatusNotFound:         http.StatusNotFound,
@@ -161,7 +161,7 @@ func getResponseHttpStatus(r *message.Response) int {
 		message.StatusInvalidArguments: http.StatusBadRequest,
 	}
 
-	if httpStatus, ok := statusMap[r.Status]; ok {
+	if httpStatus, ok := statusMap[r.Status()]; ok {
 		return httpStatus
 	} else {
 		return http.StatusInternalServerError

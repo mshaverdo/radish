@@ -5,18 +5,16 @@ import (
 	"github.com/mshaverdo/assert"
 	"github.com/mshaverdo/radish/core"
 	"github.com/mshaverdo/radish/message"
-	"strconv"
 )
 
-func getResponseInvalidArguments(cmd string, err error) *message.Response {
-	return message.NewResponse(
+func getResponseInvalidArguments(cmd string, err error) message.Response {
+	return message.NewResponseStatus(
 		message.StatusInvalidArguments,
-		message.KindStatus,
-		[][]byte{[]byte(cmd + ": " + err.Error())},
+		cmd+": "+err.Error(),
 	)
 }
 
-func getResponseCommandError(cmd string, err error) *message.Response {
+func getResponseCommandError(cmd string, err error) message.Response {
 	statusMap := map[error]message.Status{
 		//nil: message.StatusOk,
 		core.ErrInvalidParams: message.StatusInvalidArguments,
@@ -28,42 +26,37 @@ func getResponseCommandError(cmd string, err error) *message.Response {
 	status, ok := statusMap[err]
 	assert.True(ok, "unknown error: "+err.Error())
 
-	return message.NewResponse(
+	return message.NewResponseStatus(
 		status,
-		message.KindStatus,
-		[][]byte{[]byte(fmt.Sprintf("Error processing %q: %q", cmd, err.Error()))},
+		fmt.Sprintf("Error processing %q: %q", cmd, err.Error()),
 	)
 }
 
-func getResponseStringPayload(payload []byte) *message.Response {
-	return message.NewResponse(
+func getResponseStringPayload(payload []byte) message.Response {
+	return message.NewResponseString(
 		message.StatusOk,
-		message.KindString,
-		[][]byte{payload},
+		payload,
 	)
 }
 
-func getResponseIntPayload(value int) *message.Response {
-	return message.NewResponse(
+func getResponseIntPayload(value int) message.Response {
+	return message.NewResponseInt(
 		message.StatusOk,
-		message.KindInt,
-		[][]byte{[]byte(strconv.Itoa(value))},
+		value,
 	)
 }
 
-func getResponseStringSlicePayload(payloads [][]byte) *message.Response {
-	return message.NewResponse(
+func getResponseStringSlicePayload(payloads [][]byte) message.Response {
+	return message.NewResponseStringSlice(
 		message.StatusOk,
-		message.KindStringSlice,
 		payloads,
 	)
 }
 
-func getResponseStatusOkPayload() *message.Response {
-	return message.NewResponse(
+func getResponseStatusOkPayload() message.Response {
+	return message.NewResponseStatus(
 		message.StatusOk,
-		message.KindStatus,
-		nil,
+		"",
 	)
 }
 
