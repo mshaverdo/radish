@@ -471,13 +471,13 @@ func TestCore_LSet(t *testing.T) {
 		value string
 	}{
 		{"bytes", 0, ErrWrongType, ""},
-		{"404", 0, ErrNotFound, ""},
-		{"expired", 0, ErrNotFound, ""},
+		{"404", 0, ErrNoSuchKey, ""},
+		{"expired", 0, ErrNoSuchKey, ""},
 		//IMPORTANT: by proto, HEAD of the list has index 0
-		{"list", 10, ErrInvalidParams, ""},
+		{"list", 10, ErrInvalidIndex, ""},
 		{"list", 0, nil, "AC/DC"},
 		{"list", -1, nil, "Оргия праведников"},
-		{"list", -10, ErrInvalidParams, ""},
+		{"list", -10, ErrInvalidIndex, ""},
 	}
 
 	c := New(NewMockEngine())
@@ -584,6 +584,9 @@ type TestCoreConcurrencyTestCase struct {
 }
 
 func TestCore_concurrency(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
 
 	tests := []TestCoreConcurrencyTestCase{
 		{
@@ -869,6 +872,7 @@ func TestCore_Persist(t *testing.T) {
 		wantResult int
 	}{
 		{"bytes", 1},
+		{"dict", 0},
 		{"404", 0},
 		{"expired", 0},
 	}

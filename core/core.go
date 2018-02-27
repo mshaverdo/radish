@@ -18,9 +18,10 @@ var (
 
 var (
 	// ErrNotFound returned by Core API methods when requested key not found
-	ErrNotFound      = errors.New("core: item not found")
-	ErrWrongType     = errors.New("core: operation against a key holding the wrong kind of value")
-	ErrInvalidParams = errors.New("core: Invalid command arguments")
+	ErrNotFound     = errors.New("item not found")
+	ErrNoSuchKey    = errors.New("no such key")
+	ErrWrongType    = errors.New("operation against a key holding the wrong kind of value")
+	ErrInvalidIndex = errors.New("index out of range")
 )
 
 // Engine encapsulates concrete concurrency-safe storage engine  -- Btree, hashmap, etc
@@ -449,8 +450,8 @@ func (c *Core) LIndex(key string, index int) (result []byte, err error) {
 func (c *Core) LSet(key string, index int, value []byte) (err error) {
 	item := c.getItem(key)
 	if item == nil {
-		// LSet replaces only existing element
-		return ErrNotFound
+		// LSet replaces only existing element, but we can't sent ErrNotFound due to it returns <nil> instead Err No such Key
+		return ErrNoSuchKey
 	}
 
 	item.Lock()
@@ -469,7 +470,7 @@ func (c *Core) LSet(key string, index int, value []byte) (err error) {
 
 	// index out of range
 	if !(0 <= index && index <= lLen-1) {
-		return ErrInvalidParams
+		return ErrInvalidIndex
 	}
 
 	//IMPORTANT: by proto, HEAD of the list has index 0, but in the slice storage it is the LAST element of the slice
@@ -597,6 +598,10 @@ func (c *Core) Persist(key string) (result int) {
 	// check IsExpired() one more time inside the critical section, to avoid updating TTL
 	// for item, that already prepared to removal by CollectExpired()
 	if item.IsExpired() {
+		return 0
+	}
+
+	if !item.HasTtl() {
 		return 0
 	}
 

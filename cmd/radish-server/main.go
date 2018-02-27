@@ -21,6 +21,7 @@ func init() {
 //TODO: сделать все тесты внешними pkgname_test
 //TODO: in tests rename v -> tst
 //TODO: добавить описание опции -http в README. Написать, что основной режим -- RESP, дополнительный HTTP
+//TODO: в build.sh добавить пункт full-test c tag integration для полного тестирования
 
 func main() {
 	var (

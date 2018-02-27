@@ -131,24 +131,24 @@ func newStatusResult(err error) *StatusResult {
 	return &StatusResult{err: err}
 }
 
-func (r *StatusResult) Val() bool {
-	return r.err == nil
+func (r *StatusResult) Val() string {
+	if r.err == nil {
+		return "OK"
+	} else {
+		return r.err.Error()
+	}
 }
 
 func (r *StatusResult) Err() error {
 	return r.err
 }
 
-func (r *StatusResult) Result() (bool, error) {
+func (r *StatusResult) Result() (string, error) {
 	return r.Val(), r.err
 }
 
 func (r *StatusResult) String() string {
-	if r.err == nil {
-		return "OK"
-	} else {
-		return r.err.Error()
-	}
+	return r.Val()
 }
 
 // Status of command result representation, inspired by go-redis/redis

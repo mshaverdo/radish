@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"fmt"
 	"github.com/mshaverdo/assert"
 	"github.com/mshaverdo/radish/core"
 	"github.com/mshaverdo/radish/message"
@@ -17,10 +16,11 @@ func getResponseInvalidArguments(cmd string, err error) message.Response {
 func getResponseCommandError(cmd string, err error) message.Response {
 	statusMap := map[error]message.Status{
 		//nil: message.StatusOk,
-		core.ErrInvalidParams: message.StatusInvalidArguments,
-		core.ErrWrongType:     message.StatusTypeMismatch,
-		core.ErrNotFound:      message.StatusNotFound,
-		ErrServerShutdown:     message.StatusError,
+		core.ErrInvalidIndex: message.StatusInvalidArguments,
+		core.ErrWrongType:    message.StatusTypeMismatch,
+		core.ErrNotFound:     message.StatusNotFound,
+		core.ErrNoSuchKey:    message.StatusInvalidArguments,
+		ErrServerShutdown:    message.StatusError,
 	}
 
 	status, ok := statusMap[err]
@@ -28,7 +28,7 @@ func getResponseCommandError(cmd string, err error) message.Response {
 
 	return message.NewResponseStatus(
 		status,
-		fmt.Sprintf("Error processing %q: %q", cmd, err.Error()),
+		err.Error(),
 	)
 }
 

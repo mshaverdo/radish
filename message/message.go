@@ -78,6 +78,11 @@ func (r *Request) GetArgumentBytes(i int) (result []byte, err error) {
 	return r.Args[i], nil
 }
 
+// ArgumentsLen returns len of Request.Args
+func (r *Request) ArgumentsLen() int {
+	return len(r.Args)
+}
+
 func (r *Request) String() string {
 	return fmt.Sprintf(
 		"Request{\n\tCmd: %q \n\tArgs: %q \n}",

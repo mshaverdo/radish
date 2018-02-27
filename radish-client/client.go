@@ -14,8 +14,8 @@ import (
 
 const statusHeader = "X-Radish-Status"
 
-const ErrNotFound = RadishError("radish: NotFound")
-const ErrTypeMismatch = RadishError("radish: ErrTypeMismatch")
+const ErrNotFound = RadishError("redis: nil")                                                            // use this text to be compatible with redis client
+const ErrTypeMismatch = RadishError("WRONGTYPE Operation against a key holding the wrong kind of value") // use this text to be compatible with redis client
 
 var (
 	RequestTimeout = time.Second * 10
@@ -124,8 +124,8 @@ func (c *Client) HGet(key, field string) *StringResult {
 }
 
 // LRange returns the specified elements of the list stored at key.
-func (c *Client) LRange(key string, start, stop int) *StringSliceResult {
-	url := c.getUrl("LRANGE", key, strconv.Itoa(start), strconv.Itoa(stop))
+func (c *Client) LRange(key string, start, stop int64) *StringSliceResult {
+	url := c.getUrl("LRANGE", key, strconv.Itoa(int(start)), strconv.Itoa(int(stop)))
 	payload, err := c.requestSingleMulti(false, url, nil)
 	return newStringSliceResult(payload, err)
 }
@@ -155,15 +155,15 @@ func (c *Client) LLen(key string) *IntResult {
 }
 
 // LIndex Returns the element at index index in the list stored at key.
-func (c *Client) LIndex(key string, index int) *StringResult {
-	url := c.getUrl("LINDEX", key, strconv.Itoa(index))
+func (c *Client) LIndex(key string, index int64) *StringResult {
+	url := c.getUrl("LINDEX", key, strconv.Itoa(int(index)))
 	payload, err := c.requestSingleSingle(false, url, nil)
 	return newStringResult(payload, err)
 }
 
 // LSet Sets the list element at index to value.
-func (c *Client) LSet(key string, index int, value interface{}) *StatusResult {
-	url := c.getUrl("LSET", key, strconv.Itoa(index))
+func (c *Client) LSet(key string, index int64, value interface{}) *StatusResult {
+	url := c.getUrl("LSET", key, strconv.Itoa(int(index)))
 
 	bytesValue, err := convertToBytes(value)
 	if err != nil {
@@ -293,6 +293,7 @@ func (c *Client) doRequest(request *http.Request) (*http.Response, error) {
 			body,
 		)
 	default:
-		return nil, errors.New(errorStatus)
+		body, _ := ioutil.ReadAll(response.Body)
+		return nil, errors.New("ERR " + string(body))
 	}
 }

@@ -166,6 +166,10 @@ func TestHashEngine_DelSubmap(t *testing.T) {
 }
 
 func TestHashEngine_concurrency(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+
 	tests := [][]string{
 		{"aa", "bb", "cc"},
 		{"aa", "bb", "cc", "測", "測試"},

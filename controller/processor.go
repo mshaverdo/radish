@@ -1,13 +1,13 @@
 package controller
 
 import (
+	"errors"
 	"github.com/mshaverdo/radish/message"
 	"strconv"
 	"time"
 )
 
 //TODO: use go generate!
-//TODO: проверить, чтобы в режиме resp-клиента Notfound ошибки возвращались корректон для КАЖДОЙ команды (где на до -- nil, где надо -- пустой список)
 
 type Processor struct {
 	core Core
@@ -50,6 +50,11 @@ func (p *Processor) Process(request *message.Request) message.Response {
 		arg1, err := request.GetArgumentBytes(1)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
+		}
+
+		//TODO: it's to avoid using SET with EX/PX arguments. If using GO Generate, just check exact count of args for all commands
+		if request.ArgumentsLen() != 2 {
+			return getResponseInvalidArguments(request.Cmd, errors.New("SET EX/PX not supported"))
 		}
 
 		p.core.Set(arg0, arg1)
