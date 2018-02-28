@@ -1,0 +1,6 @@
+struct Request  {
+	Timestamp int64
+	Id int64
+	Cmd string
+	Args [][]byte
+}

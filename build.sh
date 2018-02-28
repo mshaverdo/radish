@@ -52,9 +52,9 @@ if [ "$GOVERS" != "devel" ]; then
 		return
 	}
 	GOVERS="${GOVERS:2}"
-	EQRES=$(vercomp "$GOVERS" "1.5")
+	EQRES=$(vercomp "$GOVERS" "1.7")
 	if [ "$EQRES" == "-1" ]; then
-		  echo "error: Go '1.5' or greater is required and '$GOVERS' is currently installed. Please upgrade Go at https://golang.org/dl to continue."
+		  echo "error: Go '1.7' or greater is required and '$GOVERS' is currently installed. Please upgrade Go at https://golang.org/dl to continue."
 		  exit 1
 	fi
 fi

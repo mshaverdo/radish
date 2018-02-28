@@ -22,6 +22,8 @@ func init() {
 //TODO: in tests rename v -> tst
 //TODO: добавить описание опции -http в README. Написать, что основной режим -- RESP, дополнительный HTTP
 //TODO: в build.sh добавить пункт full-test c tag integration для полного тестирования
+//TODO: оптимизировать перфоманс
+//TODO: перейти на go 1.10
 
 func main() {
 	var (

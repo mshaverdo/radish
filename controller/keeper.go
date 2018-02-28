@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"encoding/gob"
 	"fmt"
 	"github.com/mshaverdo/assert"
@@ -40,8 +41,9 @@ const (
 var _ = SyncNever
 
 const (
-	walFileName     = "wal_%v.gob"
+	walFileName     = "wal_%v.dat"
 	storageFileName = "storage.gob"
+	walBufferSize   = 100 * 1024 * 1024 //size of write buffer for WAL
 )
 
 type storageData struct {
@@ -60,7 +62,8 @@ type Keeper struct {
 	mutex      sync.Mutex
 	messageId  int64
 	walFile    *os.File
-	walEncoder *gob.Encoder
+	walEncoder *GencodeEncoder
+	walBuffer  *bytes.Buffer
 	lastSync   time.Time
 
 	// wg to wait for service storage-updating goroutines (runSnapshotter, etc)
@@ -81,15 +84,21 @@ func NewKeeper(core Core, dataDir string, policy SyncPolicy, mergeWalInterval ti
 
 // WriteToWal writes request to WAL
 //TODO: реорганизовать с применением каналов
-func (k *Keeper) WriteToWal(request *message.Request) error {
+func (k *Keeper) WriteToWal(request *message.Request) (err error) {
 	k.mutex.Lock()
 	defer k.mutex.Unlock()
 
 	k.messageId++
 	request.Id = k.messageId
-	err := k.walEncoder.Encode(request)
+	err = k.walEncoder.Encode(request)
+
+	if k.walBuffer.Len() > walBufferSize {
+		// copy buffer in separate IF to not sync it too often
+		io.Copy(k.walFile, k.walBuffer)
+	}
 
 	if k.syncPolicy == SyncAlways || k.syncPolicy == SyncSometimes && time.Since(k.lastSync) > 1*time.Second {
+		io.Copy(k.walFile, k.walBuffer)
 		k.walFile.Sync()
 		k.lastSync = time.Now()
 	}
@@ -199,10 +208,10 @@ func (k *Keeper) processWal(filename string) error {
 	}
 	defer file.Close()
 
-	dec := gob.NewDecoder(file)
+	//dec := gob.NewDecoder(file)
+	dec := NewGencodeDecoder(file)
 	req := new(message.Request)
 	processed := 0
-	//TODO: add optional broken records passing
 	for err := dec.Decode(req); err != io.EOF; err = dec.Decode(req) {
 		if err != nil {
 			return fmt.Errorf("Keeper.processWal(): can't process %s: %s", filename, err)
@@ -327,11 +336,14 @@ func (k *Keeper) startNewWal() (oldWalFilename, newWalFilename string, err error
 
 	if k.walFile != nil {
 		oldWalFilename = k.walFile.Name()
+		io.Copy(k.walFile, k.walBuffer) //ensure, buffer copied to the file
 		k.walFile.Close()
 	}
 
 	k.walFile = file
-	k.walEncoder = gob.NewEncoder(k.walFile)
+	k.walBuffer = bytes.NewBuffer(make([]byte, 0, walBufferSize))
+	//k.walEncoder = gob.NewEncoder(k.walBuffer)
+	k.walEncoder = NewGencodeEncoder(k.walBuffer)
 
 	return oldWalFilename, k.walFile.Name(), nil
 }

@@ -8,22 +8,15 @@ import (
 )
 
 //TODO: change Request to an interface for uniformity with Response
-// Request is a container, represents a Command, parsed from external API interface
-type Request struct {
-	//Time is a message creation time
-	Time time.Time
-	//Unique, monotony growing request ID, initialized on writing to WAL
-	Id int64
-	// Cmd is a Command type
-	Cmd string
-	// Args is a list of command positional args
-	Args [][]byte
-	// Payload carrys value for SET/HSET/etc command
-}
+//TODO: move request to different file
+
+//////////// Type Request defined via gencode: request.schema &  request.schema.gen.go///////////////////
+// using github.com/andyleap/gencode
+//go:generate gencode go -schema request.schema -package message
 
 // NewRequest constructs new Request object
 func NewRequest(cmd string, args [][]byte) *Request {
-	return &Request{Time: time.Now(), Cmd: cmd, Args: args}
+	return &Request{Timestamp: time.Now().Unix(), Cmd: cmd, Args: args}
 }
 
 // GetArgumentInt returns int argument by index i. Return error if unable to parse int, or requested index too big

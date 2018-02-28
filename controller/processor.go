@@ -322,7 +322,7 @@ func (p *Processor) FixRequestTtl(request *message.Request) error {
 			return err
 		}
 
-		seconds -= int(time.Since(request.Time).Seconds())
+		seconds -= int(time.Now().Unix() - request.Timestamp)
 		request.Args[1] = []byte(strconv.Itoa(seconds))
 	}
 
