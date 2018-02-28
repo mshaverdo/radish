@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"encoding/gob"
+	"errors"
 	"fmt"
 	"github.com/mshaverdo/assert"
 	"github.com/mshaverdo/radish/core"
@@ -59,12 +60,13 @@ type Keeper struct {
 
 	processor *Processor
 
-	mutex      sync.Mutex
-	messageId  int64
-	walFile    *os.File
-	walEncoder *GencodeEncoder
-	walBuffer  *bytes.Buffer
-	lastSync   time.Time
+	mutex       sync.Mutex
+	messageId   int64
+	walFile     *os.File
+	walEncoder  *GencodeEncoder
+	walBuffer   *bytes.Buffer
+	lastSync    time.Time
+	requestChan chan *message.Request
 
 	// wg to wait for service storage-updating goroutines (runSnapshotter, etc)
 	serviceWg sync.WaitGroup
@@ -79,31 +81,77 @@ func NewKeeper(core Core, dataDir string, policy SyncPolicy, mergeWalInterval ti
 		mergeWalInterval: mergeWalInterval,
 		processor:        NewProcessor(core),
 		stopChan:         make(chan struct{}),
+		requestChan:      make(chan *message.Request, 1000000),
 	}
 }
 
 // WriteToWal writes request to WAL
-//TODO: реорганизовать с применением каналов
 func (k *Keeper) WriteToWal(request *message.Request) (err error) {
+	// if SyncAlways, we must return reliable error status
+	if k.syncPolicy == SyncAlways {
+		return k.writeToWalWorker(request)
+	}
+
+	select {
+	case <-k.stopChan:
+		return errors.New("trying to write WAL on stopped keeper")
+	default:
+		k.requestChan <- request
+		return nil
+	}
+}
+
+func (k *Keeper) runWalController() {
+	defer k.serviceWg.Done()
+	for {
+		select {
+		case request, ok := <-k.requestChan:
+			if !ok {
+				// keeper shutting down
+				return
+			}
+			k.writeToWalWorker(request)
+		}
+	}
+}
+
+//TODO: test on full disc
+func (k *Keeper) writeToWalWorker(request *message.Request) (err error) {
+	defer func() {
+		if err != nil {
+			log.Errorf("Unable to write WAL: %s", err)
+		}
+	}()
+
 	k.mutex.Lock()
 	defer k.mutex.Unlock()
 
 	k.messageId++
 	request.Id = k.messageId
 	err = k.walEncoder.Encode(request)
-
-	if k.walBuffer.Len() > walBufferSize {
-		// copy buffer in separate IF to not sync it too often
-		io.Copy(k.walFile, k.walBuffer)
+	if err != nil {
+		return err
 	}
 
-	if k.syncPolicy == SyncAlways || k.syncPolicy == SyncSometimes && time.Since(k.lastSync) > 1*time.Second {
-		io.Copy(k.walFile, k.walBuffer)
-		k.walFile.Sync()
+	// in "SyncAlways" or "SyncSometimes" we already ready to one-second data loss
+	if k.walBuffer.Len() > walBufferSize || k.syncPolicy == SyncAlways || time.Since(k.lastSync) > 1*time.Second {
+		_, err := io.Copy(k.walFile, k.walBuffer)
+		if err != nil {
+			return err
+		}
+
+		if k.syncPolicy == SyncAlways || (k.syncPolicy == SyncSometimes && time.Since(k.lastSync) > 1*time.Second) {
+			err = k.walFile.Sync()
+		}
+
+		if err != nil {
+			return err
+		}
+
 		k.lastSync = time.Now()
 	}
 
-	return err
+	return nil
 }
 
 // restoreStorageState restores k.core state from dataDir
@@ -281,6 +329,7 @@ func (k *Keeper) Shutdown() error {
 
 	// wait for background updater finishes
 	close(k.stopChan)
+	close(k.requestChan)
 	k.serviceWg.Wait()
 
 	log.Infof("Persisting storage...")
@@ -309,6 +358,9 @@ func (k *Keeper) Start() (err error) {
 
 	k.serviceWg.Add(1)
 	go k.runSnapshotUpdater()
+
+	k.serviceWg.Add(1)
+	go k.runWalController()
 
 	return err
 }
@@ -377,6 +429,11 @@ func (k *Keeper) runSnapshotUpdater() {
 }
 
 // updateSnapshot starts new WAL and processes old WALs into existing storage snapshot
+// unfortunately, fork(2) in GO is unstable & unreliable under the heavy load due to scheduler in the child
+// may stall on StopTheWorld. under the heavy load, less then  1/10 of children starts correctly.
+// so, we cant use this fancy hack to save a snapshot with OS-implemented copy-on-write. Sad, but true =/
+// copy-on-write, implemented on Engine level causes more than 300 ms stalls while copying a hashmap,
+// so, merging WAL into separate copy of storage is least RPS-affecting technique.
 func (k *Keeper) updateSnapshot() error {
 	log.Info("Updating a snapshot")
 	_, newWal, err := k.startNewWal()

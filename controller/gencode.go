@@ -1,6 +1,6 @@
 package controller
 
-//TODO: implement tests
+//TODO: implement tests & benchmarks
 import (
 	"bytes"
 	"encoding/binary"
@@ -51,7 +51,7 @@ func (ge *GencodeEncoder) Encode(val Marshaller) error {
 
 type GencodeDecoder struct {
 	reader io.Reader
-	buf    *bytes.Buffer
+	buf    *bytes.Buffer // intermediate buffer gives x5 performance boost
 }
 
 func NewGencodeDecoder(reader io.Reader) *GencodeDecoder {
@@ -75,7 +75,7 @@ func (gd *GencodeDecoder) Decode(val Unmarshaller) error {
 	}
 
 	var sizeUint64 uint64
-	binary.Read(gd.reader, binary.LittleEndian, &sizeUint64)
+	binary.Read(gd.buf, binary.LittleEndian, &sizeUint64)
 	size := int(sizeUint64)
 
 	for gd.buf.Len() < size {

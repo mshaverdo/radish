@@ -24,6 +24,8 @@ func init() {
 //TODO: в build.sh добавить пункт full-test c tag integration для полного тестирования
 //TODO: оптимизировать перфоманс
 //TODO: перейти на go 1.10
+//TODO: !!!! при включенном WAL оно работает на GET на 20% быстрее!!! и SET тоже. Самое быстрое: persis включен, synPolicy 0
+//TODO: погонять ПОЛНЫЙ набор бенчмаркков (LPUSH, HSET)
 
 func main() {
 	var (
