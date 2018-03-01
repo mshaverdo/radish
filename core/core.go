@@ -46,12 +46,6 @@ type Engine interface {
 	// Keys returns all keys existing in the
 	//TODO: check performance in Keys() & CollectExpired(): maybe, it's better to return map[string]*Item to avoid extra Get() in those methods
 	Keys() (keys []string)
-
-	// FullLock locks engine and all items to ensure exclusive access to its content
-	FullLock()
-
-	// FullUnlock unlocks engine and all items
-	FullUnlock()
 }
 
 // Core provides domain operations on the storage -- get, set, keys, hset, hdel, etc

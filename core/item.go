@@ -1,8 +1,6 @@
 package core
 
 import (
-	"bytes"
-	"encoding/gob"
 	"fmt"
 	"github.com/mshaverdo/assert"
 	"sort"
@@ -155,46 +153,11 @@ func (i *Item) HasTtl() bool {
 }
 
 type gobExportItem struct {
+	Key string
+
 	ExpireAt time.Time
-
-	Kind  ItemKind
-	Bytes []byte
-	List  [][]byte
-	Dict  map[string][]byte
-}
-
-func (i *Item) GobEncode() ([]byte, error) {
-	data := gobExportItem{
-		ExpireAt: i.expireAt,
-
-		Kind:  i.kind,
-		Bytes: i.bytes,
-		List:  i.list,
-		Dict:  i.dict,
-	}
-
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	err := enc.Encode(&data)
-
-	return buf.Bytes(), err
-}
-
-func (i *Item) GobDecode(gobData []byte) error {
-	data := gobExportItem{}
-
-	dec := gob.NewDecoder(bytes.NewReader(gobData))
-	err := dec.Decode(&data)
-
-	if err != nil {
-		return err
-	}
-
-	i.expireAt = data.ExpireAt
-	i.kind = data.Kind
-	i.bytes = data.Bytes
-	i.list = data.List
-	i.dict = data.Dict
-
-	return nil
+	Kind     ItemKind
+	Bytes    []byte
+	List     [][]byte
+	Dict     map[string][]byte
 }

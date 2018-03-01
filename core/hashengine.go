@@ -1,9 +1,11 @@
 package core
 
 import (
-	"bytes"
 	"encoding/gob"
+	"errors"
+	"fmt"
 	"github.com/mshaverdo/assert"
+	"io"
 	"sync"
 )
 
@@ -104,35 +106,72 @@ func (e *HashEngine) DelSubmap(submap map[string]*Item) (count int) {
 	return count
 }
 
-type gobExportHashEngine struct {
-	Data map[string]*Item
-}
+// Persist dumps storage engine data into provided Writer
+func (e *HashEngine) Persist(w io.Writer, lastMessageId int64) error {
+	e.fullLock()
+	defer e.fullUnlock()
 
-func (e *HashEngine) GobEncode() ([]byte, error) {
-	export := gobExportHashEngine{Data: e.data}
+	encoder := gob.NewEncoder(w)
 
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	err := enc.Encode(&export)
-
-	return buf.Bytes(), err
-}
-
-func (e *HashEngine) GobDecode(gobData []byte) error {
-	export := gobExportHashEngine{Data: e.data}
-
-	dec := gob.NewDecoder(bytes.NewReader(gobData))
-	if err := dec.Decode(&export); err != nil {
-		return err
+	if err := encoder.Encode(lastMessageId); err != nil {
+		return fmt.Errorf("HashEngine.Persist(): can't encode messageId: %s", err)
 	}
 
-	e.data = export.Data
+	exp := &gobExportItem{}
+	for k, v := range e.data {
+		exp.Key = k
+		exp.ExpireAt = v.expireAt
+		exp.Kind = v.kind
+		exp.Bytes = v.bytes
+		exp.List = v.list
+		exp.Dict = v.dict
+
+		if err := encoder.Encode(exp); err != nil {
+			return fmt.Errorf("HashEngine.Persist(): can't encode messageId: %s", err)
+			return err
+		}
+	}
 
 	return nil
 }
 
+// Load loads storage engine data from Reader
+func (e *HashEngine) Load(r io.Reader) (lastMessageId int64, err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if len(e.data) != 0 {
+		return 0, errors.New("HashEngine.Load(): restore enabled only on empty engine")
+	}
+
+	decoder := gob.NewDecoder(r)
+
+	if err := decoder.Decode(&lastMessageId); err != nil {
+		return 0, fmt.Errorf("HashEngine.Load(): can't decode messageId: %s", err)
+	}
+
+	e.data = make(map[string]*Item)
+	exp := new(gobExportItem)
+	for err := decoder.Decode(exp); err != io.EOF; err = decoder.Decode(exp) {
+		if err != nil {
+			return 0, fmt.Errorf("HashEngine.Load(): can't decode item: %s", err)
+		}
+
+		e.data[exp.Key] = new(Item)
+		e.data[exp.Key].expireAt = exp.ExpireAt
+		e.data[exp.Key].kind = exp.Kind
+		e.data[exp.Key].bytes = exp.Bytes
+		e.data[exp.Key].list = exp.List
+		e.data[exp.Key].dict = exp.Dict
+
+		exp = new(gobExportItem)
+	}
+
+	return lastMessageId, nil
+}
+
 // FullLock locks engine and all items to ensure exclusive access to its content
-func (e *HashEngine) FullLock() {
+func (e *HashEngine) fullLock() {
 	e.mu.Lock()
 
 	for _, v := range e.data {
@@ -141,7 +180,7 @@ func (e *HashEngine) FullLock() {
 }
 
 // FullUnlock unlocks engine and all items
-func (e *HashEngine) FullUnlock() {
+func (e *HashEngine) fullUnlock() {
 	for _, v := range e.data {
 		v.Unlock()
 	}

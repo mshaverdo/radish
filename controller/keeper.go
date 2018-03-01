@@ -2,7 +2,6 @@ package controller
 
 import (
 	"bufio"
-	"encoding/gob"
 	"errors"
 	"fmt"
 	"github.com/mshaverdo/assert"
@@ -32,9 +31,6 @@ const (
 	SyncAlways
 )
 
-//TODO: storage.gob loading is TOO slow
-//TODO: GOB marshall все равно пишет слишком долго!
-
 // Avoid "Unused Constant" warning
 var _ = SyncNever
 
@@ -49,9 +45,12 @@ const (
 	walBufferSize = 20 * 1024 * 1024
 )
 
-type storageData struct {
-	MessageId int64
-	Engine    core.Engine
+type persistable interface {
+	// Persist dumps storage engine data into provided Writer
+	Persist(w io.Writer, lastMessageId int64) error
+
+	// Restore restores storage engine data from Reader
+	Load(r io.Reader) (lastMessageId int64, err error)
 }
 
 type Keeper struct {
@@ -179,6 +178,11 @@ func (k *Keeper) restoreStorageState() error {
 	if err != nil {
 		return err
 	}
+
+	if len(processedWals) == 0 {
+		return nil
+	}
+
 	// dump storage with merged WALs to disk
 	if err := k.persistStorage(); err != nil {
 		return err
@@ -208,14 +212,14 @@ func (k *Keeper) loadStorage() error {
 
 	log.Infof("Loading storage data from %s...", filename)
 
-	data := storageData{}
-	dec := gob.NewDecoder(file)
-	if err := dec.Decode(&data); err != nil {
-		return fmt.Errorf("Keeper.loadStorage(): Unable to decode stream: %s", err)
+	storageEngine := core.NewHashEngine()
+	messageId, err := storageEngine.Load(bufio.NewReader(file))
+	if err != nil {
+		return fmt.Errorf("Keeper.loadStorage(): %s", err)
 	}
 
-	k.core.SetEngine(data.Engine)
-	k.messageId = data.MessageId
+	k.core.SetEngine(storageEngine)
+	k.messageId = messageId
 
 	if err != nil {
 		return err
@@ -311,17 +315,16 @@ func (k *Keeper) persistStorage() error {
 		return fmt.Errorf("Keeper.persistStorage(): %s", err)
 	}
 
-	data := storageData{
-		Engine:    k.core.Engine(),
-		MessageId: k.messageId,
+	// ensure exclusive access to engine during encoding
+	persistable, ok := k.core.Engine().(persistable)
+	if !ok {
+		return fmt.Errorf("Keeper.persistStorage(): Failed to persist data: Engine not support persistence")
 	}
 
-	// ensure exclusive access to engine during encoding
-	data.Engine.FullLock()
-	defer data.Engine.FullUnlock()
-
-	enc := gob.NewEncoder(file)
-	if err := enc.Encode(data); err != nil {
+	w := bufio.NewWriter(file)
+	err = persistable.Persist(w, k.messageId)
+	w.Flush()
+	if err != nil {
 		return fmt.Errorf("Keeper.persistStorage(): %s", err)
 	}
 
@@ -478,6 +481,10 @@ func (k *Keeper) updateSnapshot() error {
 	processedWals, err = snapshotKeeper.processWals(processingWals)
 	if err != nil {
 		return err
+	}
+
+	if len(processedWals) == 0 {
+		return nil
 	}
 
 	// dump storage with merged WALs to disk
