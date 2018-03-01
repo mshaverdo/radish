@@ -68,6 +68,16 @@ func (s *RespServer) Shutdown() error {
 }
 
 func (s *RespServer) handler(conn redcon.Conn, command redcon.Command) {
+	pipelineCommands := conn.ReadPipeline()
+	unreliable := len(pipelineCommands) > 0
+
+	s.processRequest(conn, command, unreliable)
+	for _, c := range pipelineCommands {
+		s.processRequest(conn, c, unreliable)
+	}
+}
+
+func (s *RespServer) processRequest(conn redcon.Conn, command redcon.Command, unreliable bool) {
 	argsCount := len(command.Args)
 	if argsCount == 0 {
 		// redcon souldn't pass empty commands here, but...
@@ -89,6 +99,7 @@ func (s *RespServer) handler(conn redcon.Conn, command redcon.Command) {
 	//log.Debugf("Received request: %q", command.Args)
 
 	request := message.NewRequest(cmd, command.Args[1:])
+	request.Unreliable = unreliable
 
 	//log.Debugf("Handling request: %s", request)
 

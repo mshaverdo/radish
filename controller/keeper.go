@@ -41,8 +41,12 @@ var _ = SyncNever
 const (
 	walFileName     = "wal_%v.dat"
 	storageFileName = "storage.gob"
-	requestChanSize = 10000 // 10k seems OK to smooth peaks of sync() and flush()
-	walBufferSize   = 4096  // more buffer -- more performance -- more data losses on failure
+	requestChanSize = 100000 // 100k seems OK to smooth peaks of sync() and flush()
+	// users don't care about result of pipelined requests -- so, we can store them in the userspace buffer for a second
+	// but non-piplined requests will be flushed to disk immediately, so we could have really big buffer
+	// to boost performance of pipelined requests and don't worry about non-pipelined requests will be lost
+	// in this buffer in case of disaster
+	walBufferSize = 20 * 1024 * 1024
 )
 
 type storageData struct {
@@ -86,7 +90,8 @@ func NewKeeper(core Core, dataDir string, policy SyncPolicy, mergeWalInterval ti
 // WriteToWal writes request to WAL
 func (k *Keeper) WriteToWal(request *message.Request) (err error) {
 	// if SyncAlways, we must return reliable error status
-	if k.syncPolicy == SyncAlways {
+	// or, if request was't PIPELINEd, and user waits for response, flush buffer to file
+	if !request.Unreliable || k.syncPolicy == SyncAlways {
 		return k.writeToWalWorker(request)
 	}
 
@@ -101,6 +106,7 @@ func (k *Keeper) WriteToWal(request *message.Request) (err error) {
 
 func (k *Keeper) runWalController() {
 	defer k.serviceWg.Done()
+	ticker := time.Tick(1 * time.Second)
 	for {
 		select {
 		case request, ok := <-k.requestChan:
@@ -112,6 +118,11 @@ func (k *Keeper) runWalController() {
 			if err != nil {
 				log.Errorf("Unable to write WAL: %s", err)
 			}
+		case <-ticker:
+			k.mutex.Lock()
+			//log.Debugf("Current WAL #: %d", k.messageId)
+			k.flushBuffers(true)
+			k.mutex.Unlock()
 		}
 	}
 }
@@ -128,20 +139,26 @@ func (k *Keeper) writeToWalWorker(request *message.Request) (err error) {
 		return fmt.Errorf("Keeper.writeToWalWorker(): %s", err)
 	}
 
-	if k.syncPolicy == SyncAlways || time.Since(k.lastSync) > 1*time.Second {
+	return k.flushBuffers(!request.Unreliable)
+}
+
+// flushBuffers MUST be invoked only while k.mutex locked!
+func (k *Keeper) flushBuffers(forceFlush bool) (err error) {
+	// if request was't PIPELINEd, and user waits for response, flush buffer to file for more durability
+	// if requests was pipelined, user don't care about responses, so we can flush records to disc just every second
+	if forceFlush || k.syncPolicy == SyncAlways {
 		k.walBuffer.Flush()
 		if err != nil {
 			return fmt.Errorf("Keeper.writeToWalWorker(): %s", err)
 		}
 
-		if k.syncPolicy == SyncAlways || k.syncPolicy == SyncSometimes {
+		if k.syncPolicy == SyncAlways || (k.syncPolicy == SyncSometimes && time.Since(k.lastSync) > 1*time.Second) {
 			err = k.walFile.Sync()
 			if err != nil {
 				return fmt.Errorf("Keeper.writeToWalWorker(): %s", err)
 			}
+			k.lastSync = time.Now()
 		}
-
-		k.lastSync = time.Now()
 	}
 
 	return nil

@@ -3,4 +3,5 @@ struct Request  {
 	Id int64
 	Cmd string
 	Args [][]byte
+	Unreliable bool
 }

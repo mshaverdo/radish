@@ -13,10 +13,11 @@ var (
 )
 
 type Request struct {
-	Timestamp int64
-	Id        int64
-	Cmd       string
-	Args      [][]byte
+	Timestamp  int64
+	Id         int64
+	Cmd        string
+	Args       [][]byte
+	Unreliable bool
 }
 
 func (d *Request) Size() (s uint64) {
@@ -71,7 +72,7 @@ func (d *Request) Size() (s uint64) {
 		}
 
 	}
-	s += 16
+	s += 17
 	return
 }
 func (d *Request) Marshal(buf []byte) ([]byte, error) {
@@ -182,7 +183,14 @@ func (d *Request) Marshal(buf []byte) ([]byte, error) {
 
 		}
 	}
-	return buf[:i+16], nil
+	{
+		if d.Unreliable {
+			buf[i+16] = 1
+		} else {
+			buf[i+16] = 0
+		}
+	}
+	return buf[:i+17], nil
 }
 
 func (d *Request) Unmarshal(buf []byte) (uint64, error) {
@@ -270,5 +278,8 @@ func (d *Request) Unmarshal(buf []byte) (uint64, error) {
 
 		}
 	}
-	return i + 16, nil
+	{
+		d.Unreliable = buf[i+16] == 1
+	}
+	return i + 17, nil
 }
