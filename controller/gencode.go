@@ -2,7 +2,7 @@ package controller
 
 //TODO: implement tests & benchmarks
 import (
-	"bytes"
+	"bufio"
 	"encoding/binary"
 	"fmt"
 	"github.com/mshaverdo/assert"
@@ -51,51 +51,35 @@ func (ge *GencodeEncoder) Encode(val Marshaller) error {
 
 type GencodeDecoder struct {
 	reader io.Reader
-	buf    *bytes.Buffer // intermediate buffer gives x5 performance boost
 }
 
 func NewGencodeDecoder(reader io.Reader) *GencodeDecoder {
-	return &GencodeDecoder{reader: reader, buf: bytes.NewBuffer(nil)}
+	return &GencodeDecoder{reader: bufio.NewReader(reader)}
 }
 
 func (gd *GencodeDecoder) Decode(val Unmarshaller) error {
-	uint64Size := 8
-
-	if gd.buf.Len() < uint64Size {
-		_, err := io.CopyN(gd.buf, gd.reader, walBufferSize)
-		if err == io.EOF && gd.buf.Len() < uint64Size {
-			// Both all ok, file finished or we have fragment of uint64 in buffer and reached EOF:
-			// seems like a power failure during writing request len. But it's OK too:
-			// we just skip last broken record (credits to Redis for idea)
-			return io.EOF
-		}
-		if err != nil && err != io.EOF {
-			return err
-		}
-	}
-
 	var sizeUint64 uint64
-	binary.Read(gd.buf, binary.LittleEndian, &sizeUint64)
+	err := binary.Read(gd.reader, binary.LittleEndian, &sizeUint64)
+	if err != nil {
+		return err
+	}
 	size := int(sizeUint64)
 
-	for gd.buf.Len() < size {
-		_, err := io.CopyN(gd.buf, gd.reader, walBufferSize)
-		if err == io.EOF && gd.buf.Len() < size {
-			// Both all ok, file finished or we have fragment of uint64 in buffer and reached EOF:
-			// seems like a power failure during writing request len. But it's OK too:
-			// we just skip last broken record (credits to Redis for idea)
-			return io.EOF
+	buf := make([]byte, size)
+	read := 0
+	for read < size {
+		n, err := gd.reader.Read(buf[read:])
+		read += n
+		if err == bufio.ErrBufferFull {
+			continue
 		}
-		if err != nil && err != io.EOF {
+		if err != nil {
 			return err
 		}
 	}
+	assert.True(read == size, "Can't read full blob from buffer!")
 
-	buf := make([]byte, size)
-	n, _ := gd.buf.Read(buf)
-	assert.True(n == size, "Can't read full blob from buffer!")
-
-	_, err := val.Unmarshal(buf)
+	_, err = val.Unmarshal(buf)
 	if err != nil {
 		return err
 	}

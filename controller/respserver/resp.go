@@ -33,11 +33,6 @@ func New(host string, port int, messageHandler MessageHandler) *RespServer {
 		port:           port,
 	}
 
-	return &s
-}
-
-// ListenAndServe statrs listening to incoming connections
-func (s *RespServer) ListenAndServe() error {
 	s.server = redcon.NewServerNetwork(
 		"tcp",
 		fmt.Sprintf("%s:%d", s.host, s.port),
@@ -46,6 +41,11 @@ func (s *RespServer) ListenAndServe() error {
 		nil,
 	)
 
+	return &s
+}
+
+// ListenAndServe statrs listening to incoming connections
+func (s *RespServer) ListenAndServe() error {
 	err := s.server.ListenAndServe()
 
 	if err == nil {
@@ -68,8 +68,6 @@ func (s *RespServer) Shutdown() error {
 }
 
 func (s *RespServer) handler(conn redcon.Conn, command redcon.Command) {
-	//TODO: проверить пайплайн!
-
 	argsCount := len(command.Args)
 	if argsCount == 0 {
 		// redcon souldn't pass empty commands here, but...

@@ -78,7 +78,8 @@ func (r *Request) ArgumentsLen() int {
 
 func (r *Request) String() string {
 	return fmt.Sprintf(
-		"Request{\n\tCmd: %q \n\tArgs: %q \n}",
+		"Request{\n\tId: %d \n\tCmd: %q \n\tArgs: %q \n}",
+		r.Id,
 		r.Cmd,
 		r.Args,
 	)

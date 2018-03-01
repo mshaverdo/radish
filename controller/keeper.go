@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"bytes"
+	"bufio"
 	"encoding/gob"
 	"errors"
 	"fmt"
@@ -33,9 +33,6 @@ const (
 )
 
 //TODO: storage.gob loading is TOO slow
-//TODO: write WAL in separate thread if syncPolicy is never or sometimes
-//TODO: писать в WAL в отдельном треде, чтобы не аффектить общий перфоманс, если policy Never или Sometimes
-//TODO: пропускать ПОСЛЕДНЮЮ запись из WAL если она битая они могут получитсья в рещультате сбоя питания. Если после битой записи есть другие -- валиться с ошибкой.
 //TODO: GOB marshall все равно пишет слишком долго!
 
 // Avoid "Unused Constant" warning
@@ -44,7 +41,8 @@ var _ = SyncNever
 const (
 	walFileName     = "wal_%v.dat"
 	storageFileName = "storage.gob"
-	walBufferSize   = 100 * 1024 * 1024 //size of write buffer for WAL
+	requestChanSize = 10000 // 10k seems OK to smooth peaks of sync() and flush()
+	walBufferSize   = 4096  // more buffer -- more performance -- more data losses on failure
 )
 
 type storageData struct {
@@ -64,7 +62,7 @@ type Keeper struct {
 	messageId   int64
 	walFile     *os.File
 	walEncoder  *GencodeEncoder
-	walBuffer   *bytes.Buffer
+	walBuffer   *bufio.Writer
 	lastSync    time.Time
 	requestChan chan *message.Request
 
@@ -81,7 +79,7 @@ func NewKeeper(core Core, dataDir string, policy SyncPolicy, mergeWalInterval ti
 		mergeWalInterval: mergeWalInterval,
 		processor:        NewProcessor(core),
 		stopChan:         make(chan struct{}),
-		requestChan:      make(chan *message.Request, 1000000),
+		requestChan:      make(chan *message.Request, requestChanSize),
 	}
 }
 
@@ -110,19 +108,16 @@ func (k *Keeper) runWalController() {
 				// keeper shutting down
 				return
 			}
-			k.writeToWalWorker(request)
+			err := k.writeToWalWorker(request)
+			if err != nil {
+				log.Errorf("Unable to write WAL: %s", err)
+			}
 		}
 	}
 }
 
 //TODO: test on full disc
 func (k *Keeper) writeToWalWorker(request *message.Request) (err error) {
-	defer func() {
-		if err != nil {
-			log.Errorf("Unable to write WAL: %s", err)
-		}
-	}()
-
 	k.mutex.Lock()
 	defer k.mutex.Unlock()
 
@@ -130,22 +125,20 @@ func (k *Keeper) writeToWalWorker(request *message.Request) (err error) {
 	request.Id = k.messageId
 	err = k.walEncoder.Encode(request)
 	if err != nil {
-		return err
+		return fmt.Errorf("Keeper.writeToWalWorker(): %s", err)
 	}
 
-	// in "SyncAlways" or "SyncSometimes" we already ready to one-second data loss
-	if k.walBuffer.Len() > walBufferSize || k.syncPolicy == SyncAlways || time.Since(k.lastSync) > 1*time.Second {
-		_, err := io.Copy(k.walFile, k.walBuffer)
+	if k.syncPolicy == SyncAlways || time.Since(k.lastSync) > 1*time.Second {
+		k.walBuffer.Flush()
 		if err != nil {
-			return err
+			return fmt.Errorf("Keeper.writeToWalWorker(): %s", err)
 		}
 
-		if k.syncPolicy == SyncAlways || (k.syncPolicy == SyncSometimes && time.Since(k.lastSync) > 1*time.Second) {
+		if k.syncPolicy == SyncAlways || k.syncPolicy == SyncSometimes {
 			err = k.walFile.Sync()
-		}
-
-		if err != nil {
-			return err
+			if err != nil {
+				return fmt.Errorf("Keeper.writeToWalWorker(): %s", err)
+			}
 		}
 
 		k.lastSync = time.Now()
@@ -388,13 +381,12 @@ func (k *Keeper) startNewWal() (oldWalFilename, newWalFilename string, err error
 
 	if k.walFile != nil {
 		oldWalFilename = k.walFile.Name()
-		io.Copy(k.walFile, k.walBuffer) //ensure, buffer copied to the file
+		k.walBuffer.Flush()
 		k.walFile.Close()
 	}
 
 	k.walFile = file
-	k.walBuffer = bytes.NewBuffer(make([]byte, 0, walBufferSize))
-	//k.walEncoder = gob.NewEncoder(k.walBuffer)
+	k.walBuffer = bufio.NewWriterSize(file, walBufferSize)
 	k.walEncoder = NewGencodeEncoder(k.walBuffer)
 
 	return oldWalFilename, k.walFile.Name(), nil
