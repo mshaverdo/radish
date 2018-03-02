@@ -100,7 +100,7 @@ func (c *Client) HGetAll(key string) *StringStringMapResult {
 
 // HKeys Returns all field names in the dict stored at key.
 func (c *Client) HKeys(key string) *StringSliceResult {
-	url := c.getUrl("HKEYS", key, "*")
+	url := c.getUrl("HKEYS", key)
 	payload, err := c.requestSingleMulti(false, url, nil)
 	return newStringSliceResult(payload, err)
 }
@@ -111,7 +111,7 @@ func (c *Client) HDel(key string, fields ...string) *IntResult {
 	args[0] = key
 	copy(args[1:], fields)
 	url := c.getUrl("HDEL", args...)
-	payload, err := c.requestSingleSingle(true, url, nil)
+	payload, err := c.requestSingleSingle(false, url, nil)
 	return newIntResult(payload, err)
 }
 
@@ -177,7 +177,7 @@ func (c *Client) LSet(key string, index int64, value interface{}) *StatusResult 
 // LPop Removes and returns the first element of the list stored at key.
 func (c *Client) LPop(key string) *StringResult {
 	url := c.getUrl("LPOP", key)
-	payload, err := c.requestSingleSingle(true, url, nil)
+	payload, err := c.requestSingleSingle(false, url, nil)
 	return newStringResult(payload, err)
 }
 
@@ -192,14 +192,14 @@ func (c *Client) TTL(key string) *DurationResult {
 // Expire sets a timeout on key. After the timeout has expired, the key will automatically be deleted.
 func (c *Client) Expire(key string, expiration time.Duration) *BoolResult {
 	url := c.getUrl("EXPIRE", key, strconv.Itoa(int(expiration.Seconds())))
-	val, err := c.requestSingleSingle(true, url, nil)
+	val, err := c.requestSingleSingle(false, url, nil)
 	return newBoolResult(val, err)
 }
 
 // Persist Removes the existing timeout on key.
 func (c *Client) Persist(key string) *BoolResult {
 	url := c.getUrl("PERSIST", key)
-	val, err := c.requestSingleSingle(true, url, nil)
+	val, err := c.requestSingleSingle(false, url, nil)
 	return newBoolResult(val, err)
 }
 

@@ -128,16 +128,19 @@ func (ct *ClientTester) getDataTtl(tst TestCase) (value interface{}, err error) 
 func (ct *ClientTester) Setup(t *testing.T) {
 	ct.t = t
 
+	ct.callCommand("Set", "", "0000", 0*time.Second)
 	ct.callCommand("Set", "key1", "val1", 0*time.Second)
 	ct.callCommand("Set", "key2", "val2", 0*time.Second)
 	ct.callCommand("Set", "key3", "val3", 0*time.Second)
 	ct.callCommand("Expire", "key3", 1*time.Hour)
 
-	ct.callCommand("LPush", "list", "lv3", "lv2", "lv1")
+	ct.callCommand("LPush", "list", "lv3", "lv2", "lv1", "", "lv0")
 
 	ct.callCommand("HSet", "dict", "f1", "dv1")
 	ct.callCommand("HSet", "dict", "f2", "dv2")
 	ct.callCommand("HSet", "dict", "f3", "dv3")
+	ct.callCommand("HSet", "dict", "f__", "")
+	ct.callCommand("HSet", "dict", "", "dv000")
 }
 
 func (ct *ClientTester) Teardown() {
@@ -163,7 +166,7 @@ func TestMain(m *testing.M) {
 	//go test -tags integration -v -redis localhost:6379 -flush github.com/mshaverdo/radish/integration_test
 	flag.IntVar(&radishHttpPort, "resp", 16381, "Free port for testing RESP radish server")
 	flag.IntVar(&radishRespPort, "http", 16380, "Free port for testing HTTP radish server")
-	flag.StringVar(&redisAddr, "redis", "", "Address of existing REDIS server like 'localhost:6379'. If specified, use redis installation on the port to self-check test data. WARNING! it WILL corrupt your data!")
+	flag.StringVar(&redisAddr, "redis", "", "Address of existing REDIS server like 'localhost:6379'. If specified, use redis installation on the port to self-check test data. WARNING! it WILL FLUSH all of your data!")
 	flag.BoolVar(&redisFlush, "flush", false, "If true, flush redis DB at specified port before start test WARNING! It WILL corrupt your data!")
 	flag.Parse()
 
@@ -225,6 +228,7 @@ func Test_Set(t *testing.T) {
 		{[]interface{}{"key/1", "11_/測試\r\n\x00", 0 * time.Second}, `OK`, "11_/測試\r\n\x00"},
 		{[]interface{}{"key2", "", 0 * time.Second}, `OK`, ``},
 		{[]interface{}{"key3\"\r\n\x00\x00", "測試", 0 * time.Second}, `OK`, `測試`},
+		{[]interface{}{"", "dat", 0 * time.Second}, `OK`, `dat`},
 	}
 
 	for _, tester := range testers {
@@ -236,9 +240,10 @@ func Test_Set(t *testing.T) {
 
 func Test_LPush(t *testing.T) {
 	tests := []TestCase{
-		{[]interface{}{"list", "!", "!!"}, `5`, `[! !! lv1 lv2 lv3]`},
+		{[]interface{}{"list", "!", "!!", ""}, `8`, `[  ! !! lv0 lv1 lv2 lv3]`},
 		{[]interface{}{"404", "val2!"}, `1`, `[val2!]`},
 		{[]interface{}{"key1", "val1"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`},
+		{[]interface{}{"", "val1"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`},
 		{[]interface{}{"dict", "val1"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`},
 	}
 
@@ -251,9 +256,12 @@ func Test_LPush(t *testing.T) {
 
 func Test_HSet(t *testing.T) {
 	tests := []TestCase{
-		{[]interface{}{"dict", "f1", "val1"}, `false`, `map[f1: val1 f2: dv2 f3: dv3]`},
-		{[]interface{}{"dict", "f5", "!!!"}, `true`, `map[f1: val1 f2: dv2 f3: dv3 f5: !!!]`},
-		{[]interface{}{"404", "f1", "val11"}, `true`, `map[f1: val11]`},
+		{[]interface{}{"dict", "f1", "val1"}, `false`, `map[: dv000 f1: val1 f2: dv2 f3: dv3 f__: ]`},
+		{[]interface{}{"dict", "f5", "!!!"}, `true`, `map[: dv000 f1: val1 f2: dv2 f3: dv3 f5: !!! f__: ]`},
+		{[]interface{}{"", "f1", "val11"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`},
+		{[]interface{}{"404", "", "val00"}, `true`, `map[: val00]`},
+		{[]interface{}{"404", "f1", ""}, `true`, `map[: val00 f1: ]`},
+		{[]interface{}{"404", "f2", "val1"}, `true`, `map[: val00 f1:  f2: val1]`},
 		{[]interface{}{"key1", "f1", "val11"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`},
 		{[]interface{}{"list", "f1", "val11"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`},
 	}
@@ -267,9 +275,10 @@ func Test_HSet(t *testing.T) {
 
 func Test_Keys(t *testing.T) {
 	tests := []TestCase{
-		{[]interface{}{"*"}, `[dict key1 key2 key3 list]`, ``},
+		{[]interface{}{"*"}, `[ dict key1 key2 key3 list]`, ``},
 		{[]interface{}{"key*"}, `[key1 key2 key3]`, ``},
 		{[]interface{}{"\x00"}, `[]`, ``},
+		{[]interface{}{""}, `[]`, ``},
 	}
 
 	for _, tester := range testers {
@@ -281,6 +290,7 @@ func Test_Keys(t *testing.T) {
 
 func Test_Get(t *testing.T) {
 	tests := []TestCase{
+		{[]interface{}{""}, `0000`, ``},
 		{[]interface{}{"key1"}, `val1`, ``},
 		{[]interface{}{"404"}, `ERROR: redis: nil`, ``},
 		{[]interface{}{"list"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, ``},
@@ -295,7 +305,7 @@ func Test_Get(t *testing.T) {
 
 func Test_Del(t *testing.T) {
 	tests := []TestCase{
-		{[]interface{}{"404", "key1"}, `1`, `[dict key2 key3 list]`},
+		{[]interface{}{"404", "key1", ""}, `2`, `[dict key2 key3 list]`},
 		{[]interface{}{"list", "dict"}, `2`, `[key2 key3]`},
 	}
 
@@ -308,9 +318,10 @@ func Test_Del(t *testing.T) {
 
 func Test_HKeys(t *testing.T) {
 	tests := []TestCase{
-		{[]interface{}{"dict"}, `[f1 f2 f3]`, ``},
+		{[]interface{}{"dict"}, `[ f1 f2 f3 f__]`, ``},
 		{[]interface{}{"list"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, ``},
 		{[]interface{}{"key1"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, ``},
+		{[]interface{}{""}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, ``},
 		{[]interface{}{"404"}, `[]`, ``},
 	}
 
@@ -323,9 +334,10 @@ func Test_HKeys(t *testing.T) {
 
 func Test_HGetAll(t *testing.T) {
 	tests := []TestCase{
-		{[]interface{}{"dict"}, `map[f1: dv1 f2: dv2 f3: dv3]`, ``},
+		{[]interface{}{"dict"}, `map[: dv000 f1: dv1 f2: dv2 f3: dv3 f__: ]`, ``},
 		{[]interface{}{"list"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, ``},
 		{[]interface{}{"key1"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, ``},
+		{[]interface{}{""}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, ``},
 		{[]interface{}{"404"}, `map[]`, ``},
 	}
 
@@ -338,9 +350,9 @@ func Test_HGetAll(t *testing.T) {
 
 func Test_HDel(t *testing.T) {
 	tests := []TestCase{
-		{[]interface{}{"dict", "f1", "f404"}, `1`, `map[f2: dv2 f3: dv3]`},
-		{[]interface{}{"dict", ""}, `0`, `map[f2: dv2 f3: dv3]`},
-		{[]interface{}{"dict", "f2", "f3"}, `2`, `map[]`},
+		{[]interface{}{"dict", "f1", "f404"}, `1`, `map[: dv000 f2: dv2 f3: dv3 f__: ]`},
+		{[]interface{}{"dict", ""}, `1`, `map[f2: dv2 f3: dv3 f__: ]`},
+		{[]interface{}{"dict", "f2", "f3"}, `2`, `map[f__: ]`},
 		{[]interface{}{"list", "f1"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`},
 		{[]interface{}{"key1", "f1"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`},
 		{[]interface{}{"404", "f1"}, `0`, `map[]`},
@@ -356,9 +368,11 @@ func Test_HDel(t *testing.T) {
 func Test_HGet(t *testing.T) {
 	tests := []TestCase{
 		{[]interface{}{"dict", "f1"}, `dv1`, ``},
+		{[]interface{}{"dict", ""}, `dv000`, ``},
 		{[]interface{}{"dict", "f404"}, `ERROR: redis: nil`, ``},
 		{[]interface{}{"list", "f1"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, ``},
 		{[]interface{}{"key1", "f1"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, ``},
+		{[]interface{}{"", "f1"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, ``},
 		{[]interface{}{"404", "f1"}, `ERROR: redis: nil`, ``},
 	}
 
@@ -371,7 +385,7 @@ func Test_HGet(t *testing.T) {
 
 func Test_LLen(t *testing.T) {
 	tests := []TestCase{
-		{[]interface{}{"list"}, `3`, ``},
+		{[]interface{}{"list"}, `5`, ``},
 		{[]interface{}{"dict"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, ``},
 		{[]interface{}{"key1"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, ``},
 		{[]interface{}{"404"}, `0`, ``},
@@ -386,11 +400,12 @@ func Test_LLen(t *testing.T) {
 
 func Test_LRange(t *testing.T) {
 	tests := []TestCase{
-		{[]interface{}{"list", int64(0), int64(-1)}, `[lv1 lv2 lv3]`, ``},
+		{[]interface{}{"list", int64(0), int64(-1)}, `[ lv0 lv1 lv2 lv3]`, ``},
 		{[]interface{}{"list", int64(10), int64(10)}, `[]`, ``},
-		{[]interface{}{"list", int64(1), int64(2)}, `[lv2 lv3]`, ``},
-		{[]interface{}{"list", int64(0), int64(0)}, `[lv1]`, ``},
+		{[]interface{}{"list", int64(1), int64(2)}, `[ lv1]`, ``},
+		{[]interface{}{"list", int64(0), int64(0)}, `[lv0]`, ``},
 		{[]interface{}{"key1", int64(0), int64(0)}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, ``},
+		{[]interface{}{"", int64(0), int64(0)}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, ``},
 		{[]interface{}{"dict", int64(0), int64(0)}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, ``},
 		{[]interface{}{"404", int64(0), int64(0)}, `[]`, ``},
 	}
@@ -404,11 +419,12 @@ func Test_LRange(t *testing.T) {
 
 func Test_LIndex(t *testing.T) {
 	tests := []TestCase{
-		{[]interface{}{"list", int64(0)}, `lv1`, ``},
+		{[]interface{}{"list", int64(0)}, `lv0`, ``},
 		{[]interface{}{"list", int64(-1)}, `lv3`, ``},
 		{[]interface{}{"list", int64(10)}, `ERROR: redis: nil`, ``},
 		{[]interface{}{"dict", int64(10)}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, ``},
 		{[]interface{}{"key1", int64(10)}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, ``},
+		{[]interface{}{"", int64(10)}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, ``},
 		{[]interface{}{"404", int64(10)}, `ERROR: redis: nil`, ``},
 	}
 
@@ -421,12 +437,13 @@ func Test_LIndex(t *testing.T) {
 
 func Test_LSet(t *testing.T) {
 	tests := []TestCase{
-		{[]interface{}{"list", int64(0), "val1"}, `OK`, `[lv2 lv3 val1]`},
-		{[]interface{}{"list", int64(1), ""}, `OK`, `[ lv3 val1]`},
-		{[]interface{}{"list", int64(-1), "val1"}, `OK`, `[ val1 val1]`},
-		{[]interface{}{"list", int64(10), "val1"}, `ERROR: ERR index out of range`, `[ val1 val1]`},
+		{[]interface{}{"list", int64(0), "val1"}, `OK`, `[ lv1 lv2 lv3 val1]`},
+		{[]interface{}{"list", int64(1), ""}, `OK`, `[ lv1 lv2 lv3 val1]`},
+		{[]interface{}{"list", int64(-1), "val1"}, `OK`, `[ lv1 lv2 val1 val1]`},
+		{[]interface{}{"list", int64(10), "val1"}, `ERROR: ERR index out of range`, `[ lv1 lv2 val1 val1]`},
 		{[]interface{}{"dict", int64(0), "val1"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`},
 		{[]interface{}{"key1", int64(0), "val1"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`},
+		{[]interface{}{"", int64(0), "val1"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`},
 		{[]interface{}{"404", int64(0), "val1"}, `ERROR: ERR no such key`, `[]`},
 	}
 
@@ -439,12 +456,15 @@ func Test_LSet(t *testing.T) {
 
 func Test_LPop(t *testing.T) {
 	tests := []TestCase{
+		{[]interface{}{"list"}, `lv0`, `[ lv1 lv2 lv3]`},
+		{[]interface{}{"list"}, ``, `[lv1 lv2 lv3]`},
 		{[]interface{}{"list"}, `lv1`, `[lv2 lv3]`},
 		{[]interface{}{"list"}, `lv2`, `[lv3]`},
 		{[]interface{}{"list"}, `lv3`, `[]`},
 		{[]interface{}{"list"}, `ERROR: redis: nil`, `[]`},
 		{[]interface{}{"404"}, `ERROR: redis: nil`, `[]`},
 		{[]interface{}{"key1"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`},
+		{[]interface{}{""}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`},
 		{[]interface{}{"dict"}, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`, `ERROR: WRONGTYPE Operation against a key holding the wrong kind of value`},
 	}
 
@@ -458,6 +478,7 @@ func Test_LPop(t *testing.T) {
 func Test_TTL(t *testing.T) {
 	tests := []TestCase{
 		{[]interface{}{"key1"}, `-1s`, ``},
+		{[]interface{}{""}, `-1s`, ``},
 		{[]interface{}{"404"}, `-2s`, ``},
 	}
 
@@ -470,6 +491,7 @@ func Test_TTL(t *testing.T) {
 
 func Test_Expire(t *testing.T) {
 	tests := []TestCase{
+		{[]interface{}{"", 5 * time.Second}, `true`, `5s`},
 		{[]interface{}{"key1", 5 * time.Second}, `true`, `5s`},
 		{[]interface{}{"key1", 0 * time.Second}, `true`, `-2s`},
 		{[]interface{}{"key2", 0 * time.Second}, `true`, `-2s`},
@@ -486,6 +508,7 @@ func Test_Expire(t *testing.T) {
 
 func Test_Persist(t *testing.T) {
 	tests := []TestCase{
+		{[]interface{}{""}, `false`, `-1s`},
 		{[]interface{}{"key1"}, `false`, `-1s`},
 		{[]interface{}{"key3"}, `true`, `-1s`},
 		{[]interface{}{"404"}, `false`, `-2s`},

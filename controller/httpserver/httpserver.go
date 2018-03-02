@@ -43,9 +43,7 @@ func New(host string, port int, messageHandler MessageHandler) *HttpServer {
 		stopChan:       make(chan struct{}),
 	}
 
-	serverMux := http.NewServeMux()
-	serverMux.Handle("/", &s)
-	s.Server.Handler = serverMux
+	s.Server.Handler = &s
 
 	return &s
 }
@@ -187,7 +185,7 @@ func getCmdArgs(r *http.Request) (cmd string, args [][]byte, err error) {
 		}
 		args[i] = []byte(arg)
 	}
-
+	//fmt.Printf(">>>>>>>> %q\n", r.URL.EscapedPath())
 	return cmd, args, nil
 }
 
@@ -220,7 +218,9 @@ func parseRequest(httpRequest *http.Request) (*message.Request, error) {
 		return nil, err
 	}
 
-	args = append(args, payload...)
+	if httpRequest.Method == "POST" {
+		args = append(args, payload...)
+	}
 
 	return message.NewRequest(cmd, args), nil
 }

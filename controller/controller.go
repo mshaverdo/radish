@@ -13,9 +13,14 @@ import (
 
 // ApiServer represents Radish API endpoint interface
 type ApiServer interface {
+	// ListenAndServe starts the server
 	ListenAndServe() error
-	Shutdown() error
+
+	// Stop stops server to accept new requests and gracefully finishes current requests
 	Stop() error
+
+	// Shutdown shuts Radish and leads to return from Controller.ListenAndServe() that causes application termination
+	Shutdown() error
 }
 
 // Core provides domain operations on the storage -- Get, Set, Keys, etc.
@@ -45,7 +50,7 @@ type Core interface {
 	DGet(key, field string) (result []byte, err error)
 
 	// Returns all field names in the dict stored at key.
-	DKeys(key, pattern string) (result []string, err error)
+	DKeys(key string) (result []string, err error)
 
 	// DGetAll Returns all fields and values of the hash stored at key.
 	DGetAll(key string) (result [][]byte, err error)
@@ -90,6 +95,8 @@ type Core interface {
 var (
 	ErrServerShutdown = errors.New("server shutdown")
 )
+
+//go:generate go run ../codegen/processor/main.go
 
 type Controller struct {
 	host                   string
@@ -173,6 +180,7 @@ func (c *Controller) ListenAndServe() error {
 // Shutdown gracefully shuts server down
 func (c *Controller) Shutdown() {
 	for !c.isRunning() {
+		//wait, while server finishes startup
 		time.Sleep(100 * time.Millisecond)
 	}
 

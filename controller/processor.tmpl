@@ -1,0 +1,121 @@
+/*
+ * CODE GENERATED AUTOMATICALLY WITH github.com/mshaverdo/radish/codegen/processor
+ * THIS FILE SHOULD NOT BE EDITED BY HAND!
+ */
+
+package {{.PackageName}}
+
+import (
+	"github.com/mshaverdo/radish/message"
+	"strconv"
+	"time"
+	"fmt"
+)
+
+type Processor struct {
+	core Core
+}
+
+func NewProcessor(core Core) *Processor {
+	return &Processor{core: core}
+}
+
+// Process processes request to Core
+func (p *Processor) Process(request *message.Request) message.Response {
+	switch request.Cmd {
+
+	{{ range .Commands -}}
+	case "{{.Cmd}}":
+		{{if not .IsVariadic -}}
+		if request.ArgumentsLen() != {{ len .Args }} {
+			return getResponseInvalidArguments(request.Cmd, fmt.Errorf("wrong number of arguments for '%s' command: %d", request.Cmd, request.ArgumentsLen()))
+		}
+		{{- end }}
+
+		{{ range $index, $arg := .Args }}
+			{{- if eq $arg "string" }}
+				arg{{$index}}, err := request.GetArgumentString({{$index}})
+			{{- else if eq $arg "int"}}
+				arg{{$index}}, err := request.GetArgumentInt({{$index}})
+			{{- else if eq $arg "[]string"}}
+				arg{{$index}}, err := request.GetArgumentVariadicString({{$index}})
+			{{- else if eq $arg "[][]byte"}}
+				arg{{$index}}, err := request.GetArgumentVariadicBytes({{$index}})
+			{{- else if eq $arg "[]byte"}}
+				arg{{$index}}, err := request.GetArgumentBytes({{$index}})
+			{{- end }}
+	        if err != nil {
+	            return getResponseInvalidArguments(request.Cmd, err)
+	        }
+		{{- end }}
+
+		{{ if and .Result .Error -}}
+			result, err :=
+		{{- else if .Result -}}
+			result :=
+		{{- else if .Error -}}
+			err =
+		{{- end -}}
+		p.core.{{.Function}}(
+
+		{{- range $index, $arg := .Args -}}
+			arg{{- $index -}},
+		{{- end -}}
+		)
+		{{- if .Error }}
+			if err != nil {
+	            return getResponseCommandError(request.Cmd, err)
+	        }
+		{{ end }}
+
+		{{ if eq .Result "string" }}
+			return getResponseStringPayload([]byte(result))
+		{{else if eq .Result "[]byte" }}
+			return getResponseStringPayload(result)
+		{{else if eq .Result "[]string" }}
+			return getResponseStringSlicePayload(stringsSliceToBytesSlise(result))
+		{{else if eq .Result "[][]byte" }}
+			return getResponseStringSlicePayload(result)
+		{{else if eq .Result "int" }}
+			return getResponseIntPayload(result)
+		{{else if eq .Result "" }}
+			return getResponseStatusOkPayload()
+		{{ end -}}
+	{{- end}}
+	default:
+		return message.NewResponseStatus(message.StatusInvalidCommand, "unknown command: "+request.Cmd)
+	}
+}
+
+
+// IsModifyingRequest returns true, if request modifies a storage
+func (p *Processor) IsModifyingRequest(request *message.Request) bool {
+	switch request.Cmd {
+	case {{- range $i, $c := .ModifyingCommands -}}{{if $i}},{{end}} "{{$c.Cmd}}"{{end -}}:
+		return true
+	default:
+		return false
+	}
+}
+
+// FixWalRequestTtl Correct TTL value for TTL-related requests due to ttl is time.Now() -related value
+func (p *Processor) FixRequestTtl(request *message.Request) error {
+	switch request.Cmd {
+	{{- range .Commands -}}
+		{{- if .TtlArgIndex}}
+			case "{{.Cmd}}":
+				seconds, err := request.GetArgumentInt({{.TtlArgIndex}})
+				if err != nil {
+					return err
+				}
+
+				seconds -= int(time.Now().Unix() - request.Timestamp)
+				request.Args[{{.TtlArgIndex}}] = []byte(strconv.Itoa(seconds))
+		{{- end}}
+	{{- end}}
+	default:
+	//do nothing. Just a placeholder to save correct syntax w/o ttl-related commands
+	}
+
+	return nil
+}

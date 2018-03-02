@@ -140,7 +140,7 @@ func TestHttpServer_ParseRequest(t *testing.T) {
 			"",
 			nil,
 			"CMD",
-			[]string{"OK", ""},
+			[]string{"OK"},
 			nil,
 		},
 	}

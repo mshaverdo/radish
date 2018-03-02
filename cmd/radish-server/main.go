@@ -29,6 +29,7 @@ func init() {
 //TODO: посмотреть, как у редиса реализован TTL, почитать.
 //TODO: REST в HTTP API
 //TODO: пройтись по возвращаемым ошибкам и подобавлять вызывающую функу для тексовых ошибок
+//TODO: написать в readme, что не поддерживается команда SET key val EX ttl, вместо нее надо использоавть SETEX -- поэтому в go-redis SET с указанием TTL работать не будет
 
 func main() {
 	var (
@@ -57,6 +58,7 @@ func main() {
 
 	//TODO: disable in production
 	//TODO: разобраться, почему с включенным профилем обрабатывается на 10% больше RPS
+	//TODO: написать в readme, что поддерживает pipeline, написать как запустить бенчмарк
 	if cpuProfile != "" {
 		if f, err := os.Create(cpuProfile); err == nil {
 			pprof.StartCPUProfile(f)

@@ -45,6 +45,8 @@ const (
 	walBufferSize = 20 * 1024 * 1024
 )
 
+//TODO: добавить фабрику HashEngine, чтобы решение о том, какой анджин порождать принималось в однйо точке
+//TODO: переименовать в 2 интерфейса  persister & loader
 type persistable interface {
 	// Persist dumps storage engine data into provided Writer
 	Persist(w io.Writer, lastMessageId int64) error

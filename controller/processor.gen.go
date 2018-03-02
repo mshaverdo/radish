@@ -1,13 +1,16 @@
+/*
+ * CODE GENERATED AUTOMATICALLY WITH github.com/mshaverdo/radish/codegen/processor
+ * THIS FILE SHOULD NOT BE EDITED BY HAND!
+ */
+
 package controller
 
 import (
-	"errors"
+	"fmt"
 	"github.com/mshaverdo/radish/message"
 	"strconv"
 	"time"
 )
-
-//TODO: use go generate!
 
 type Processor struct {
 	core Core
@@ -20,7 +23,12 @@ func NewProcessor(core Core) *Processor {
 // Process processes request to Core
 func (p *Processor) Process(request *message.Request) message.Response {
 	switch request.Cmd {
+
 	case "KEYS":
+		if request.ArgumentsLen() != 1 {
+			return getResponseInvalidArguments(request.Cmd, fmt.Errorf("wrong number of arguments for '%s' command: %d", request.Cmd, request.ArgumentsLen()))
+		}
+
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
@@ -30,6 +38,10 @@ func (p *Processor) Process(request *message.Request) message.Response {
 
 		return getResponseStringSlicePayload(stringsSliceToBytesSlise(result))
 	case "GET":
+		if request.ArgumentsLen() != 1 {
+			return getResponseInvalidArguments(request.Cmd, fmt.Errorf("wrong number of arguments for '%s' command: %d", request.Cmd, request.ArgumentsLen()))
+		}
+
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
@@ -42,25 +54,27 @@ func (p *Processor) Process(request *message.Request) message.Response {
 
 		return getResponseStringPayload(result)
 	case "SET":
+		if request.ArgumentsLen() != 2 {
+			return getResponseInvalidArguments(request.Cmd, fmt.Errorf("wrong number of arguments for '%s' command: %d", request.Cmd, request.ArgumentsLen()))
+		}
+
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
 		}
-
 		arg1, err := request.GetArgumentBytes(1)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
-		}
-
-		//TODO: it's to avoid using SET with EX/PX arguments. If using GO Generate, just check exact count of args for all commands
-		if request.ArgumentsLen() != 2 {
-			return getResponseInvalidArguments(request.Cmd, errors.New("SET EX/PX not supported"))
 		}
 
 		p.core.Set(arg0, arg1)
 
 		return getResponseStatusOkPayload()
 	case "SETEX":
+		if request.ArgumentsLen() != 3 {
+			return getResponseInvalidArguments(request.Cmd, fmt.Errorf("wrong number of arguments for '%s' command: %d", request.Cmd, request.ArgumentsLen()))
+		}
+
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
@@ -78,45 +92,44 @@ func (p *Processor) Process(request *message.Request) message.Response {
 
 		return getResponseStatusOkPayload()
 	case "DEL":
-		args, err := request.GetArgumentVariadicString(0)
+
+		arg0, err := request.GetArgumentVariadicString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
 		}
 
-		result := p.core.Del(args)
+		result := p.core.Del(arg0)
 
 		return getResponseIntPayload(result)
-	case "HKEYS":
+	case "HSET":
+		if request.ArgumentsLen() != 3 {
+			return getResponseInvalidArguments(request.Cmd, fmt.Errorf("wrong number of arguments for '%s' command: %d", request.Cmd, request.ArgumentsLen()))
+		}
+
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
 		}
 		arg1, err := request.GetArgumentString(1)
 		if err != nil {
-			//TODO: fixme in core
-			// Oops. pattern isn't available in redis
-			arg1 = "*"
+			return getResponseInvalidArguments(request.Cmd, err)
 		}
-		result, err := p.core.DKeys(arg0, arg1)
-		if err != nil {
-			return getResponseCommandError(request.Cmd, err)
-		}
-
-		return getResponseStringSlicePayload(stringsSliceToBytesSlise(result))
-	case "HGETALL":
-		arg0, err := request.GetArgumentString(0)
+		arg2, err := request.GetArgumentBytes(2)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
 		}
 
-		result, err := p.core.DGetAll(arg0)
+		result, err := p.core.DSet(arg0, arg1, arg2)
 		if err != nil {
 			return getResponseCommandError(request.Cmd, err)
 		}
 
-		return getResponseStringSlicePayload(result)
-
+		return getResponseIntPayload(result)
 	case "HGET":
+		if request.ArgumentsLen() != 2 {
+			return getResponseInvalidArguments(request.Cmd, fmt.Errorf("wrong number of arguments for '%s' command: %d", request.Cmd, request.ArgumentsLen()))
+		}
+
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
@@ -132,55 +145,76 @@ func (p *Processor) Process(request *message.Request) message.Response {
 		}
 
 		return getResponseStringPayload(result)
-	case "HSET":
+	case "HKEYS":
+		if request.ArgumentsLen() != 1 {
+			return getResponseInvalidArguments(request.Cmd, fmt.Errorf("wrong number of arguments for '%s' command: %d", request.Cmd, request.ArgumentsLen()))
+		}
+
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
 		}
-		arg1, err := request.GetArgumentString(1)
-		if err != nil {
-			return getResponseInvalidArguments(request.Cmd, err)
-		}
-		arg2, err := request.GetArgumentBytes(2)
-		if err != nil {
-			return getResponseInvalidArguments(request.Cmd, err)
-		}
 
-		count, err := p.core.DSet(arg0, arg1, arg2)
+		result, err := p.core.DKeys(arg0)
 		if err != nil {
 			return getResponseCommandError(request.Cmd, err)
 		}
 
-		return getResponseIntPayload(count)
+		return getResponseStringSlicePayload(stringsSliceToBytesSlise(result))
+	case "HGETALL":
+		if request.ArgumentsLen() != 1 {
+			return getResponseInvalidArguments(request.Cmd, fmt.Errorf("wrong number of arguments for '%s' command: %d", request.Cmd, request.ArgumentsLen()))
+		}
+
+		arg0, err := request.GetArgumentString(0)
+		if err != nil {
+			return getResponseInvalidArguments(request.Cmd, err)
+		}
+
+		result, err := p.core.DGetAll(arg0)
+		if err != nil {
+			return getResponseCommandError(request.Cmd, err)
+		}
+
+		return getResponseStringSlicePayload(result)
 	case "HDEL":
+
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
 		}
-		args, err := request.GetArgumentVariadicString(1)
+		arg1, err := request.GetArgumentVariadicString(1)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
 		}
 
-		count, err := p.core.DDel(arg0, args)
+		result, err := p.core.DDel(arg0, arg1)
 		if err != nil {
 			return getResponseCommandError(request.Cmd, err)
 		}
 
-		return getResponseIntPayload(count)
+		return getResponseIntPayload(result)
 	case "LLEN":
+		if request.ArgumentsLen() != 1 {
+			return getResponseInvalidArguments(request.Cmd, fmt.Errorf("wrong number of arguments for '%s' command: %d", request.Cmd, request.ArgumentsLen()))
+		}
+
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
 		}
 
-		count, err := p.core.LLen(arg0)
+		result, err := p.core.LLen(arg0)
 		if err != nil {
 			return getResponseCommandError(request.Cmd, err)
 		}
 
-		return getResponseIntPayload(count)
+		return getResponseIntPayload(result)
 	case "LRANGE":
+		if request.ArgumentsLen() != 3 {
+			return getResponseInvalidArguments(request.Cmd, fmt.Errorf("wrong number of arguments for '%s' command: %d", request.Cmd, request.ArgumentsLen()))
+		}
+
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
@@ -201,6 +235,10 @@ func (p *Processor) Process(request *message.Request) message.Response {
 
 		return getResponseStringSlicePayload(result)
 	case "LINDEX":
+		if request.ArgumentsLen() != 2 {
+			return getResponseInvalidArguments(request.Cmd, fmt.Errorf("wrong number of arguments for '%s' command: %d", request.Cmd, request.ArgumentsLen()))
+		}
+
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
@@ -217,6 +255,10 @@ func (p *Processor) Process(request *message.Request) message.Response {
 
 		return getResponseStringPayload(result)
 	case "LSET":
+		if request.ArgumentsLen() != 3 {
+			return getResponseInvalidArguments(request.Cmd, fmt.Errorf("wrong number of arguments for '%s' command: %d", request.Cmd, request.ArgumentsLen()))
+		}
+
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
@@ -237,6 +279,7 @@ func (p *Processor) Process(request *message.Request) message.Response {
 
 		return getResponseStatusOkPayload()
 	case "LPUSH":
+
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
@@ -246,13 +289,17 @@ func (p *Processor) Process(request *message.Request) message.Response {
 			return getResponseInvalidArguments(request.Cmd, err)
 		}
 
-		count, err := p.core.LPush(arg0, arg1)
+		result, err := p.core.LPush(arg0, arg1)
 		if err != nil {
 			return getResponseCommandError(request.Cmd, err)
 		}
 
-		return getResponseIntPayload(count)
+		return getResponseIntPayload(result)
 	case "LPOP":
+		if request.ArgumentsLen() != 1 {
+			return getResponseInvalidArguments(request.Cmd, fmt.Errorf("wrong number of arguments for '%s' command: %d", request.Cmd, request.ArgumentsLen()))
+		}
+
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
@@ -265,18 +312,26 @@ func (p *Processor) Process(request *message.Request) message.Response {
 
 		return getResponseStringPayload(result)
 	case "TTL":
+		if request.ArgumentsLen() != 1 {
+			return getResponseInvalidArguments(request.Cmd, fmt.Errorf("wrong number of arguments for '%s' command: %d", request.Cmd, request.ArgumentsLen()))
+		}
+
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
 		}
 
-		ttl, err := p.core.Ttl(arg0)
+		result, err := p.core.Ttl(arg0)
 		if err != nil {
 			return getResponseCommandError(request.Cmd, err)
 		}
 
-		return getResponseIntPayload(ttl)
+		return getResponseIntPayload(result)
 	case "EXPIRE":
+		if request.ArgumentsLen() != 2 {
+			return getResponseInvalidArguments(request.Cmd, fmt.Errorf("wrong number of arguments for '%s' command: %d", request.Cmd, request.ArgumentsLen()))
+		}
+
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
@@ -290,6 +345,10 @@ func (p *Processor) Process(request *message.Request) message.Response {
 
 		return getResponseIntPayload(result)
 	case "PERSIST":
+		if request.ArgumentsLen() != 1 {
+			return getResponseInvalidArguments(request.Cmd, fmt.Errorf("wrong number of arguments for '%s' command: %d", request.Cmd, request.ArgumentsLen()))
+		}
+
 		arg0, err := request.GetArgumentString(0)
 		if err != nil {
 			return getResponseInvalidArguments(request.Cmd, err)
@@ -298,6 +357,7 @@ func (p *Processor) Process(request *message.Request) message.Response {
 		result := p.core.Persist(arg0)
 
 		return getResponseIntPayload(result)
+
 	default:
 		return message.NewResponseStatus(message.StatusInvalidCommand, "unknown command: "+request.Cmd)
 	}
@@ -316,7 +376,7 @@ func (p *Processor) IsModifyingRequest(request *message.Request) bool {
 // FixWalRequestTtl Correct TTL value for TTL-related requests due to ttl is time.Now() -related value
 func (p *Processor) FixRequestTtl(request *message.Request) error {
 	switch request.Cmd {
-	case "SETEX", "EXPIRE":
+	case "SETEX":
 		seconds, err := request.GetArgumentInt(1)
 		if err != nil {
 			return err
@@ -324,6 +384,16 @@ func (p *Processor) FixRequestTtl(request *message.Request) error {
 
 		seconds -= int(time.Now().Unix() - request.Timestamp)
 		request.Args[1] = []byte(strconv.Itoa(seconds))
+	case "EXPIRE":
+		seconds, err := request.GetArgumentInt(1)
+		if err != nil {
+			return err
+		}
+
+		seconds -= int(time.Now().Unix() - request.Timestamp)
+		request.Args[1] = []byte(strconv.Itoa(seconds))
+	default:
+		//do nothing. Just a placeholder to save correct syntax w/o ttl-related commands
 	}
 
 	return nil

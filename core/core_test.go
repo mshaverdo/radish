@@ -163,7 +163,7 @@ func TestCore_Set(t *testing.T) {
 		c.Set(v.key, []byte(v.value))
 		got, err := c.Get(v.key)
 		if err != nil {
-			t.Errorf("Set(%q) err: %q != %q", v.key, err, nil)
+			t.Errorf("Set(%q) err: %q != nil", v.key, err)
 		}
 		if string(got) != v.value {
 			t.Errorf("Set(%q) got: %q != %q", v.key, string(got), v.value)
@@ -223,30 +223,28 @@ func TestCore_DGet(t *testing.T) {
 
 func TestCore_DKeys(t *testing.T) {
 	tests := []struct {
-		key, pattern string
-		err          error
-		want         []string
+		key  string
+		err  error
+		want []string
 	}{
-		{"bytes", "", ErrWrongType, nil},
-		{"expired", "", nil, nil},
-		{"404", "", nil, nil},
-		{"dict", "b", nil, []string{}},
-		{"dict", "b*", nil, []string{"banana"}},
-		{"dict", "*", nil, []string{"banana", "測試"}},
+		{"bytes", ErrWrongType, nil},
+		{"expired", nil, nil},
+		{"404", nil, nil},
+		{"dict", nil, []string{"banana", "測試"}},
 	}
 
 	c := New(NewMockEngine())
 
 	for _, v := range tests {
-		got, err := c.DKeys(v.key, v.pattern)
+		got, err := c.DKeys(v.key)
 		sort.Strings(got)
 		sort.Strings(v.want)
 
 		if err != v.err {
-			t.Errorf("DKeys(%q, %q) err: %q != %q", v.key, v.pattern, err, v.err)
+			t.Errorf("DKeys(%q) err: %q != %q", v.key, err, v.err)
 		}
 		if diff := deep.Equal(got, v.want); diff != nil {
-			t.Errorf("DKeys(%q, %q): %s\n\ngot:%v\n\nwant:%v", v.key, v.pattern, diff, got, v.want)
+			t.Errorf("DKeys(%q): %s\n\ngot:%v\n\nwant:%v", v.key, diff, got, v.want)
 		}
 	}
 }
@@ -335,7 +333,7 @@ func TestCore_DDel(t *testing.T) {
 
 	for _, v := range tests {
 		count, err := c.DDel(v.key, v.fields)
-		got, _ := c.DKeys(v.key, "*")
+		got, _ := c.DKeys(v.key)
 		sort.Strings(got)
 		sort.Strings(v.wantKeys)
 
@@ -656,7 +654,7 @@ func coreConcurrencyWorker(wg *sync.WaitGroup, c *Core, tests []TestCoreConcurre
 				c.DSet(key, field, []byte(time.Now().String()))
 				c.DGet(key, field)
 			}
-			c.DKeys(key, "**")
+			c.DKeys(key)
 			c.DGetAll(key)
 			c.DDel(key, t.dictFields)
 		}

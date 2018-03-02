@@ -84,9 +84,21 @@ func (c *Core) CollectExpired() (count int) {
 	return count
 }
 
+/*
+  Public methods could be featured as API Commands, available via HTTP, RESP, etc external API using @tags, one per line
+  This tags used by codegen/processor to generate message-to-core bindings
+
+  @command <LABEL>			- feature method as command with label <LABEL>. E.g. KEYS, GET, SET...
+  @modifying				- command modifies storage and should be logged into WAL
+  @ttl <ARGUMENT_INDEX>		- command has int TTL argument in seconds, in  ARGUMENT_INDEX zero-based position.
+							E.g. Expire(key, seconds) has tag `@ttl 1` due to <seconds> in position 1
+							It used to fix TTL-argument during restore from WAL
+*/
+
 // Keys returns all keys matching glob pattern
 // Warning: consider KEYS as a command that should only be used in production environments with extreme care.
 // It may ruin performance when it is executed against large databases.
+// @command KEYS
 func (c *Core) Keys(pattern string) (result []string) {
 	allKeys := c.engine.Keys()
 
@@ -119,6 +131,7 @@ func (c *Core) Keys(pattern string) (result []string) {
 
 // Get the value of key. If the key does not exist the special value nil is returned.
 // An error is returned if the value stored at key is not a string, because GET only handles string values.
+// @command GET
 func (c *Core) Get(key string) (result []byte, err error) {
 	item := c.getItem(key)
 	if item == nil {
@@ -142,6 +155,8 @@ func (c *Core) Get(key string) (result []byte, err error) {
 // Set key to hold the string value.
 // If key already holds a value, it is overwritten, regardless of its type.
 // Any previous time to live associated with the key is discarded on successful SET operation.
+// @command SET
+// @modifying
 func (c *Core) Set(key string, value []byte) {
 	c.engine.AddOrReplace(map[string]*Item{key: NewItemBytes(value)})
 }
@@ -149,6 +164,9 @@ func (c *Core) Set(key string, value []byte) {
 // Set key to hold the string value and set key to timeout after a given number of seconds.
 // If key already holds a value, it is overwritten, regardless of its type.
 // ttl <= 0 leads to deleting record
+// @command SETEX
+// @modifying
+// @ttl 1
 func (c *Core) SetEx(key string, seconds int, value []byte) {
 	if seconds <= 0 {
 		//item expired before set, just remove it
@@ -165,6 +183,8 @@ func (c *Core) SetEx(key string, seconds int, value []byte) {
 // Due to the system isn't supports replications/slaves,
 // we don't need conflict resolution, so we could simplify deletion:
 // just remove link to Item from Engine, instead marking 'deleted' and then collect garbage in background, etc
+// @command DEL
+// @modifying
 func (c *Core) Del(keys []string) (count int) {
 	return c.engine.Del(keys)
 }
@@ -174,6 +194,8 @@ func (c *Core) Del(keys []string) (count int) {
 // If field already exists in the dict, it is overwritten.
 // returns 1 if f field is a new field in the hash and value was set.
 // returns 0 if field already exists in the hash and the value was updated.
+// @command HSET
+// @modifying
 func (c *Core) DSet(key, field string, value []byte) (count int, err error) {
 	item := c.getItem(key)
 	if item == nil {
@@ -201,6 +223,7 @@ func (c *Core) DSet(key, field string, value []byte) (count int, err error) {
 }
 
 // DGet Returns the value associated with field in the dict stored at key.
+// @command HGET
 func (c *Core) DGet(key, field string) (result []byte, err error) {
 	item := c.getItem(key)
 	if item == nil {
@@ -227,8 +250,9 @@ func (c *Core) DGet(key, field string) (result []byte, err error) {
 }
 
 // Returns all field names in the dict stored at key.
-//TODO: remove argument "pattern" -- it isn't available in REDIS
-func (c *Core) DKeys(key, pattern string) (result []string, err error) {
+// @command HKEYS
+func (c *Core) DKeys(key string) (result []string, err error) {
+	pattern := "*"
 	item := c.getItem(key)
 	if item == nil {
 		// In Redis, LRange on non-exists key returns empty list, not <nil> aka NotFound
@@ -258,6 +282,7 @@ func (c *Core) DKeys(key, pattern string) (result []string, err error) {
 // DGetAll Returns all fields and values of the hash stored at key.
 // In the returned value, every field name is followed by its value,
 // so the length of the reply is twice the size of the hash.
+// @command HGETALL
 func (c *Core) DGetAll(key string) (result [][]byte, err error) {
 	item := c.getItem(key)
 	if item == nil {
@@ -287,6 +312,8 @@ func (c *Core) DGetAll(key string) (result [][]byte, err error) {
 // DDel Removes the specified fields from the hash stored at key.
 // Specified fields that do not exist within this hash are ignored.
 // If key does not exist, it is treated as an empty hash and this command returns 0.
+// @command HDEL
+// @modifying
 func (c *Core) DDel(key string, fields []string) (count int, err error) {
 	item := c.getItem(key)
 	if item == nil {
@@ -314,6 +341,7 @@ func (c *Core) DDel(key string, fields []string) (count int, err error) {
 // LLen Returns the length of the list stored at key.
 // If key does not exist, it is interpreted as an empty list and 0 is returned.
 // An error is returned when the value stored at key is not a list.
+// @command LLEN
 func (c *Core) LLen(key string) (count int, err error) {
 	item := c.getItem(key)
 	if item == nil {
@@ -335,6 +363,7 @@ func (c *Core) LLen(key string) (count int, err error) {
 // The offsets start and stop are zero-based indexes,  with 0 being the first element of the list (the HEAD of the list)
 // These offsets can also be negative numbers indicating offsets starting at the end of the list.
 // For example, -1 is the last element of the list, -2 the penultimate, and so on.
+// @command LRANGE
 func (c *Core) LRange(key string, start, stop int) (result [][]byte, err error) {
 	item := c.getItem(key)
 	if item == nil {
@@ -400,6 +429,7 @@ func (c *Core) LRange(key string, start, stop int) (result [][]byte, err error) 
 // Negative indices can be used to designate elements starting at the tail of the list.
 // Here, -1 means the last element, -2 means the penultimate and so forth.
 // When the value at key is not a list, an error is returned.
+// @command LINDEX
 func (c *Core) LIndex(key string, index int) (result []byte, err error) {
 	item := c.getItem(key)
 	if item == nil {
@@ -441,6 +471,8 @@ func (c *Core) LIndex(key string, index int) (result []byte, err error) {
 // Negative indices can be used to designate elements starting at the tail of the list.
 // Here, -1 means the last element, -2 means the penultimate and so forth.
 // An error is returned for out of range indexes.
+// @command LSET
+// @modifying
 func (c *Core) LSet(key string, index int, value []byte) (err error) {
 	item := c.getItem(key)
 	if item == nil {
@@ -481,6 +513,8 @@ func (c *Core) LSet(key string, index int, value []byte) (err error) {
 // Multiple Elements are inserted one after the other to the head of the list,
 // from the leftmost element to the rightmost element.
 // So for instance the command LPush("mylist",  []byte[a b c]) will result into a list containing [c, b, a]
+// @command LPUSH
+// @modifying
 func (c *Core) LPush(key string, values [][]byte) (count int, err error) {
 	item := c.getItem(key)
 	if item == nil {
@@ -506,6 +540,8 @@ func (c *Core) LPush(key string, values [][]byte) (count int, err error) {
 }
 
 // LPop Removes and returns the first element of the list stored at key.
+// @command LPOP
+// @modifying
 func (c *Core) LPop(key string) (result []byte, err error) {
 	item := c.getItem(key)
 	if item == nil {
@@ -535,6 +571,7 @@ func (c *Core) LPop(key string) (result []byte, err error) {
 
 // Ttl Returns the remaining time to live of a key that has a timeout.
 // If key not found, return error, if key found, but has no setted TTL, return -1
+// @command TTL
 func (c *Core) Ttl(key string) (ttl int, err error) {
 	item := c.getItem(key)
 	if item == nil {
@@ -554,6 +591,9 @@ func (c *Core) Ttl(key string) (ttl int, err error) {
 
 // Expire sets a timeout on key. After the timeout has expired, the key will automatically be deleted.
 // Note that calling EXPIRE with a non-positive timeout will result in the key being deleted rather than expired
+// @command EXPIRE
+// @modifying
+// @ttl 1
 func (c *Core) Expire(key string, seconds int) (result int) {
 	item := c.getItem(key)
 	if item == nil {
@@ -580,6 +620,8 @@ func (c *Core) Expire(key string, seconds int) (result int) {
 }
 
 // Persist Removes the existing timeout on key.
+// @command PERSIST
+// @modifying
 func (c *Core) Persist(key string) (result int) {
 	item := c.getItem(key)
 	if item == nil {
