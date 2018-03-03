@@ -48,6 +48,8 @@ type Storage interface {
 	Keys() (keys []string)
 }
 
+var _ Storage = (*StorageHash)(nil)
+
 // Core provides domain operations on the storage -- get, set, keys, hset, hdel, etc
 type Core struct {
 	storage Storage

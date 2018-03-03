@@ -30,6 +30,8 @@ type ResponseStatus struct {
 	payload string
 }
 
+var _ Response = (*ResponseStatus)(nil)
+
 func NewResponseStatus(status Status, payload string) *ResponseStatus {
 	return &ResponseStatus{status: status, payload: payload}
 }
@@ -59,6 +61,8 @@ type ResponseInt struct {
 	status  Status
 	payload int
 }
+
+var _ Response = (*ResponseInt)(nil)
 
 func NewResponseInt(status Status, payload int) *ResponseInt {
 	return &ResponseInt{status: status, payload: payload}
@@ -90,6 +94,8 @@ type ResponseString struct {
 	payload []byte
 }
 
+var _ Response = (*ResponseString)(nil)
+
 func NewResponseString(status Status, payload []byte) *ResponseString {
 	return &ResponseString{status: status, payload: payload}
 }
@@ -119,6 +125,8 @@ type ResponseStringSlice struct {
 	status  Status
 	payload [][]byte
 }
+
+var _ Response = (*ResponseStringSlice)(nil)
 
 func NewResponseStringSlice(status Status, payload [][]byte) *ResponseStringSlice {
 	return &ResponseStringSlice{status: status, payload: payload}

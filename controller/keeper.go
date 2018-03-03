@@ -52,6 +52,8 @@ type persistable interface {
 	Load(r io.Reader) (lastMessageId int64, err error)
 }
 
+var _ persistable = (*core.StorageHash)(nil)
+
 type Keeper struct {
 	mergeWalInterval time.Duration
 	syncPolicy       SyncPolicy

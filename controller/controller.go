@@ -23,6 +23,9 @@ type ApiServer interface {
 	Shutdown() error
 }
 
+var _ ApiServer = (*rest.Server)(nil)
+var _ ApiServer = (*resp.Server)(nil)
+
 // Core provides domain operations on the storage -- Get, Set, Keys, etc.
 type Core interface {
 	// CollectExpired removes expired garbage items from the storage
@@ -91,6 +94,8 @@ type Core interface {
 	// SetStorage sets storage after loading
 	SetStorage(core.Storage)
 }
+
+var _ Core = (*core.Core)(nil)
 
 var (
 	ErrServerShutdown = errors.New("server shutdown")
