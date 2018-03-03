@@ -122,7 +122,7 @@ func (e *StorageHash) Persist(w io.Writer, lastMessageId int64) error {
 		exp.Dict = v.dict
 
 		if err := encoder.Encode(exp); err != nil {
-			return fmt.Errorf("StorageHash.Persist(): can't encode messageId: %s", err)
+			return fmt.Errorf("StorageHash.Persist(): can't encode item: %s", err)
 			return err
 		}
 	}

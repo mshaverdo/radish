@@ -1,9 +1,15 @@
 package core
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"github.com/go-test/deep"
+	"io/ioutil"
+	"math"
 	"math/rand"
+	"os"
+	"reflect"
 	"sort"
 	"sync"
 	"testing"
@@ -57,8 +63,8 @@ func TestStorageHash_GetSubmap(t *testing.T) {
 
 	for _, v := range tests {
 		got := e.GetSubmap(v.keys)
-		if diff := deep.Equal(got, v.want); diff != nil {
-			t.Errorf("GetSubmap(%q): %s\n\ngot:%v\n\nwant:%v", v.keys, diff, got, v.want)
+		if !reflect.DeepEqual(got, v.want) {
+			t.Errorf("GetSubmap(%q): \ngot:%v\n\nwant:%v", v.keys, got, v.want)
 		}
 	}
 }
@@ -221,4 +227,99 @@ func StorageHashWorker(wg *sync.WaitGroup, e *StorageHash, tests [][]string) {
 	e.AddOrReplace(items)
 
 	wg.Done()
+}
+
+func GetFilledStorageHash(n int) *StorageHash {
+	items := make(map[string]*Item, n)
+
+	for i := 0; i < n; i++ {
+		key := fmt.Sprintf("key:%d", i)
+		data := []byte(fmt.Sprintf("XXX"))
+		switch i % 3 {
+		case 0:
+			items[key] = NewItemBytes(data)
+		case 1:
+			items[key] = NewItemList([][]byte{data})
+		case 2:
+			items[key] = NewItemDict(map[string][]byte{key: data})
+		}
+	}
+
+	s := NewStorageHash()
+	s.AddOrReplace(items)
+
+	return s
+}
+
+func TestStorageHash_PersistLoad(t *testing.T) {
+	persisting := NewStorageHash()
+	persisting.data = getSampleDataStorageHash()
+	buf := bytes.NewBuffer(nil)
+
+	err := persisting.Persist(buf, math.MaxInt64)
+	if err != nil {
+		t.Errorf("Failed to persist: %s", err)
+	}
+
+	loading := NewStorageHash()
+	messageId, err := loading.Load(buf)
+
+	if err != nil {
+		t.Errorf("Failed to load: %s", err)
+	}
+
+	if messageId != math.MaxInt64 {
+		t.Errorf("Invalid messageId: %d != %d", messageId, math.MaxInt64)
+	}
+
+	if !reflect.DeepEqual(loading.data, persisting.data) {
+		t.Errorf("Persist/Load data mismatch: \ngot:%q\n\nwant:%q", loading.data, persisting.data)
+	}
+}
+
+func BenchmarkStorageHash_Persist(b *testing.B) {
+	file, err := ioutil.TempFile("", "storage")
+	w := bufio.NewWriter(file)
+
+	if err != nil {
+		b.Fatalf("Failed to create temp file: %s", err)
+	}
+
+	defer func() {
+		name := file.Name()
+		file.Close()
+		os.Remove(name)
+	}()
+
+	s := GetFilledStorageHash(b.N)
+
+	b.ResetTimer()
+	s.Persist(w, 0)
+	w.Flush()
+}
+
+func BenchmarkStorageHash_Load(b *testing.B) {
+	file, err := ioutil.TempFile("", "storage")
+	w := bufio.NewWriter(file)
+
+	if err != nil {
+		b.Fatalf("Failed to create temp file: %s", err)
+	}
+
+	defer func() {
+		name := file.Name()
+		file.Close()
+		os.Remove(name)
+	}()
+
+	GetFilledStorageHash(b.N).Persist(w, 0)
+	w.Flush()
+
+	file.Seek(0, 0)
+	r := bufio.NewReader(file)
+
+	s := NewStorageHash()
+
+	b.ResetTimer()
+	s.Load(r)
 }
