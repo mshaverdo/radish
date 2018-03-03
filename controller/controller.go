@@ -85,11 +85,11 @@ type Core interface {
 	// Persist Removes the existing timeout on key.
 	Persist(key string) (result int)
 
-	// Engine returns reference to underlying engine to persisting
-	Engine() core.Engine
+	// Storage returns reference to underlying storage to persisting
+	Storage() core.Storage
 
-	// SetEngine sets engine after loading
-	SetEngine(core.Engine)
+	// SetStorage sets storage after loading
+	SetStorage(core.Storage)
 }
 
 var (
@@ -132,7 +132,7 @@ func New(
 	c := Controller{
 		host:                   host,
 		port:                   port,
-		core:                   core.New(core.NewHashEngine()),
+		core:                   core.New(core.NewStorageHash()),
 		stopChan:               make(chan struct{}),
 		collectExpiredInterval: collectInterval,
 		dataDir:                dataDir,

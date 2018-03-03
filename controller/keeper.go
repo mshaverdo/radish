@@ -31,9 +31,6 @@ const (
 	SyncAlways
 )
 
-// Avoid "Unused Constant" warning
-var _ = SyncNever
-
 const (
 	walFileName     = "wal_%v.dat"
 	storageFileName = "storage.gob"
@@ -45,13 +42,13 @@ const (
 	walBufferSize = 20 * 1024 * 1024
 )
 
-//TODO: добавить фабрику HashEngine, чтобы решение о том, какой анджин порождать принималось в однйо точке
+//TODO: добавить фабрику StorageHash, чтобы решение о том, какой анджин порождать принималось в однйо точке
 //TODO: переименовать в 2 интерфейса  persister & loader
 type persistable interface {
-	// Persist dumps storage engine data into provided Writer
+	// Persist dumps storage  data into provided Writer
 	Persist(w io.Writer, lastMessageId int64) error
 
-	// Restore restores storage engine data from Reader
+	// Restore restores storage  data from Reader
 	Load(r io.Reader) (lastMessageId int64, err error)
 }
 
@@ -214,13 +211,13 @@ func (k *Keeper) loadStorage() error {
 
 	log.Infof("Loading storage data from %s...", filename)
 
-	storageEngine := core.NewHashEngine()
-	messageId, err := storageEngine.Load(bufio.NewReader(file))
+	storage := core.NewStorageHash()
+	messageId, err := storage.Load(bufio.NewReader(file))
 	if err != nil {
 		return fmt.Errorf("Keeper.loadStorage(): %s", err)
 	}
 
-	k.core.SetEngine(storageEngine)
+	k.core.SetStorage(storage)
 	k.messageId = messageId
 
 	if err != nil {
@@ -317,10 +314,10 @@ func (k *Keeper) persistStorage() error {
 		return fmt.Errorf("Keeper.persistStorage(): %s", err)
 	}
 
-	// ensure exclusive access to engine during encoding
-	persistable, ok := k.core.Engine().(persistable)
+	// ensure exclusive access to storage during encoding
+	persistable, ok := k.core.Storage().(persistable)
 	if !ok {
-		return fmt.Errorf("Keeper.persistStorage(): Failed to persist data: Engine not support persistence")
+		return fmt.Errorf("Keeper.persistStorage(): Failed to persist data: Storage not support persistence")
 	}
 
 	w := bufio.NewWriter(file)
@@ -446,7 +443,7 @@ func (k *Keeper) runSnapshotUpdater() {
 // unfortunately, fork(2) in GO is unstable & unreliable under the heavy load due to scheduler in the child
 // may stall on StopTheWorld. under the heavy load, less then  1/10 of children starts correctly.
 // so, we cant use this fancy hack to save a snapshot with OS-implemented copy-on-write. Sad, but true =/
-// copy-on-write, implemented on Engine level causes more than 300 ms stalls while copying a hashmap,
+// copy-on-write, implemented on Storage level causes more than 300 ms stalls while copying a hashmap,
 // so, merging WAL into separate copy of storage is least RPS-affecting technique.
 func (k *Keeper) updateSnapshot() error {
 	log.Info("Updating a snapshot")
@@ -470,7 +467,7 @@ func (k *Keeper) updateSnapshot() error {
 	assert.True(len(allWals) != len(processingWals), "new WAL must be in datadir: "+k.dataDir+" "+newWal)
 
 	snapshotKeeper := NewKeeper(
-		core.New(core.NewHashEngine()),
+		core.New(core.NewStorageHash()),
 		k.dataDir,
 		SyncNever,
 		0,

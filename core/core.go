@@ -6,7 +6,7 @@ import (
 	"math"
 )
 
-//TODO: if Engine.Lock() will be a bottleneck, try to use sharding by engines
+//TODO: if Storage.Lock() will be a bottleneck, try to use sharding by storages
 // configuration
 var (
 	// CollectExpiredBatchSize items processed by CollectExpired()  at once, in single mutex lock to reduce mutex lock overhead
@@ -24,23 +24,23 @@ var (
 	ErrInvalidIndex = errors.New("index out of range")
 )
 
-// Engine encapsulates concrete concurrency-safe storage engine  -- Btree, hashmap, etc
-type Engine interface {
+// Storage encapsulates concrete concurrency-safe storage engine  -- Btree, hashmap, etc
+type Storage interface {
 	// Get returns reference to Item by key. If Item not exists, return nil
 	Get(key string) (item *Item)
 
 	// Get returns *Items mapped to provided keys.
 	GetSubmap(keys []string) (submap map[string]*Item)
 
-	// AddOrReplace adds new or replaces existing Items in the engine
+	// AddOrReplace adds new or replaces existing Items in the storage
 	AddOrReplace(items map[string]*Item)
 
-	// Del removes Items from engine and returns count of actually removed values
-	// if key not found in the engine, just skip it
+	// Del removes Items from storage and returns count of actually removed values
+	// if key not found in the storage, just skip it
 	Del(keys []string) (count int)
 
 	// DelSubmap removes Items only if existing *Item equals to provided submap[key]
-	// if key not found in the engine, just skip it and returns count of actually deleted items
+	// if key not found in the storage, just skip it and returns count of actually deleted items
 	DelSubmap(submap map[string]*Item) (count int)
 
 	// Keys returns all keys existing in the
@@ -50,25 +50,25 @@ type Engine interface {
 
 // Core provides domain operations on the storage -- get, set, keys, hset, hdel, etc
 type Core struct {
-	engine Engine
+	storage Storage
 }
 
 // New constructs new core instance
-func New(engine Engine) *Core {
-	return &Core{engine: engine}
+func New(storage Storage) *Core {
+	return &Core{storage: storage}
 }
 
-// CollectExpired checks all keys from engine and removes items with expired TTL and return count of actually removed items
+// CollectExpired checks all keys from storage and removes items with expired TTL and return count of actually removed items
 func (c *Core) CollectExpired() (count int) {
 	//TODO: check performance, it could freeze writing operations for a long time!
-	allKeys := c.engine.Keys()
+	allKeys := c.storage.Keys()
 
 	for len(allKeys) > 0 {
 		batchLen := int(math.Min(float64(CollectExpiredBatchSize), float64(len(allKeys))))
 		batch := allKeys[:batchLen]
 		allKeys = allKeys[batchLen:]
 
-		items := c.engine.GetSubmap(batch)
+		items := c.storage.GetSubmap(batch)
 		expiredItems := map[string]*Item{}
 		for key, item := range items {
 			item.RLock()
@@ -78,7 +78,7 @@ func (c *Core) CollectExpired() (count int) {
 			item.RUnlock()
 		}
 
-		count += c.engine.DelSubmap(expiredItems)
+		count += c.storage.DelSubmap(expiredItems)
 	}
 
 	return count
@@ -100,14 +100,14 @@ func (c *Core) CollectExpired() (count int) {
 // It may ruin performance when it is executed against large databases.
 // @command KEYS
 func (c *Core) Keys(pattern string) (result []string) {
-	allKeys := c.engine.Keys()
+	allKeys := c.storage.Keys()
 
 	isFresh := func(key string) bool {
 		if !KeysCheckTtl {
 			return true
 		}
 
-		i := c.engine.Get(key)
+		i := c.storage.Get(key)
 
 		if i == nil {
 			return false
@@ -158,7 +158,7 @@ func (c *Core) Get(key string) (result []byte, err error) {
 // @command SET
 // @modifying
 func (c *Core) Set(key string, value []byte) {
-	c.engine.AddOrReplace(map[string]*Item{key: NewItemBytes(value)})
+	c.storage.AddOrReplace(map[string]*Item{key: NewItemBytes(value)})
 }
 
 // Set key to hold the string value and set key to timeout after a given number of seconds.
@@ -176,17 +176,17 @@ func (c *Core) SetEx(key string, seconds int, value []byte) {
 
 	item := NewItemBytes(value)
 	item.SetTtl(seconds)
-	c.engine.AddOrReplace(map[string]*Item{key: item})
+	c.storage.AddOrReplace(map[string]*Item{key: item})
 }
 
 // Del Removes the specified keys, ignoring not existing and returns count of actually removed values.
 // Due to the system isn't supports replications/slaves,
 // we don't need conflict resolution, so we could simplify deletion:
-// just remove link to Item from Engine, instead marking 'deleted' and then collect garbage in background, etc
+// just remove link to Item from Storage, instead marking 'deleted' and then collect garbage in background, etc
 // @command DEL
 // @modifying
 func (c *Core) Del(keys []string) (count int) {
-	return c.engine.Del(keys)
+	return c.storage.Del(keys)
 }
 
 // DSet Sets field in the hash stored at key to value.
@@ -201,7 +201,7 @@ func (c *Core) DSet(key, field string, value []byte) (count int, err error) {
 	if item == nil {
 		item = NewItemDict(map[string][]byte{})
 		defer func() {
-			c.engine.AddOrReplace(map[string]*Item{key: item})
+			c.storage.AddOrReplace(map[string]*Item{key: item})
 		}()
 	}
 
@@ -520,7 +520,7 @@ func (c *Core) LPush(key string, values [][]byte) (count int, err error) {
 	if item == nil {
 		item = NewItemList([][]byte{})
 		defer func() {
-			c.engine.AddOrReplace(map[string]*Item{key: item})
+			c.storage.AddOrReplace(map[string]*Item{key: item})
 		}()
 	}
 
@@ -646,22 +646,22 @@ func (c *Core) Persist(key string) (result int) {
 	return 1
 }
 
-// Engine returns reference to underlying engine to persisting
-// Except Engine, Core is stateless by design, so it's enough to persist Engine to save all Core state
-func (c *Core) Engine() Engine {
-	return c.engine
+// Storage returns reference to underlying storage to persisting
+// Except Storage, Core is stateless by design, so it's enough to persist Storage to save all Core state
+func (c *Core) Storage() Storage {
+	return c.storage
 }
 
-// SetEngine sets storage engine after loading
-// Except Engine, Core is stateless by design, so it's enough to persist Engine to save all Core state
-func (c *Core) SetEngine(engine Engine) {
-	c.engine = engine
+// SetStorage sets storage storage after loading
+// Except Storage, Core is stateless by design, so it's enough to persist Storage to save all Core state
+func (c *Core) SetStorage(storage Storage) {
+	c.storage = storage
 }
 
 // warning: it could affect performance due to extra mutex lock.
 // if it makes perf. penalty, move  IsExpired() check inside existing Lock() in every API func
 func (c *Core) getItem(key string) *Item {
-	item := c.engine.Get(key)
+	item := c.storage.Get(key)
 	if item == nil {
 		return nil
 	}

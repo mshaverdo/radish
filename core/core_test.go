@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-type MockEngine struct {
+type MockStorage struct {
 	data map[string]*Item
 }
 
@@ -38,15 +38,15 @@ func getSampleDataCore() map[string]*Item {
 	}
 }
 
-func NewMockEngine() *MockEngine {
-	return &MockEngine{data: getSampleDataCore()}
+func NewMockStorage() *MockStorage {
+	return &MockStorage{data: getSampleDataCore()}
 }
 
-func (e *MockEngine) Get(key string) (item *Item) {
+func (e *MockStorage) Get(key string) (item *Item) {
 	return e.data[key]
 }
 
-func (e *MockEngine) Keys() (keys []string) {
+func (e *MockStorage) Keys() (keys []string) {
 	keys = make([]string, 0, len(e.data))
 	for k := range e.data {
 		keys = append(keys, k)
@@ -55,13 +55,13 @@ func (e *MockEngine) Keys() (keys []string) {
 	return keys
 }
 
-func (e *MockEngine) AddOrReplace(items map[string]*Item) {
+func (e *MockStorage) AddOrReplace(items map[string]*Item) {
 	for k, item := range items {
 		e.data[k] = item
 	}
 }
 
-func (e *MockEngine) Del(keys []string) (count int) {
+func (e *MockStorage) Del(keys []string) (count int) {
 	for _, k := range keys {
 		if _, ok := e.data[k]; ok {
 			count++
@@ -73,7 +73,7 @@ func (e *MockEngine) Del(keys []string) (count int) {
 	return count
 }
 
-func (e *MockEngine) GetSubmap(keys []string) (submap map[string]*Item) {
+func (e *MockStorage) GetSubmap(keys []string) (submap map[string]*Item) {
 	submap = make(map[string]*Item, len(keys))
 
 	for _, key := range keys {
@@ -85,7 +85,7 @@ func (e *MockEngine) GetSubmap(keys []string) (submap map[string]*Item) {
 	return submap
 }
 
-func (e *MockEngine) DelSubmap(submap map[string]*Item) (count int) {
+func (e *MockStorage) DelSubmap(submap map[string]*Item) (count int) {
 	for key, item := range submap {
 		if existingItem, ok := e.data[key]; ok && existingItem == item {
 			count++
@@ -108,7 +108,7 @@ func TestCore_Keys(t *testing.T) {
 		{"*i*", []string{"dict", "list"}},
 	}
 
-	c := New(NewMockEngine())
+	c := New(NewMockStorage())
 
 	for _, v := range tests {
 		got := c.Keys(v.pattern)
@@ -134,7 +134,7 @@ func TestCore_Get(t *testing.T) {
 		{"dict", ErrWrongType, ""},
 	}
 
-	c := New(NewMockEngine())
+	c := New(NewMockStorage())
 
 	for _, v := range tests {
 		got, err := c.Get(v.key)
@@ -157,7 +157,7 @@ func TestCore_Set(t *testing.T) {
 		{"expired", "not expired"},
 	}
 
-	c := New(NewMockEngine())
+	c := New(NewMockStorage())
 
 	for _, v := range tests {
 		c.Set(v.key, []byte(v.value))
@@ -180,7 +180,7 @@ func TestCore_Del(t *testing.T) {
 		{[]string{"dict", "測", "expired"}, []string{}},
 	}
 
-	c := New(NewMockEngine())
+	c := New(NewMockStorage())
 
 	for _, v := range tests {
 		c.Del(v.keys)
@@ -208,7 +208,7 @@ func TestCore_DGet(t *testing.T) {
 		{"dict", "測試", nil, "別れ、比類のない"},
 	}
 
-	c := New(NewMockEngine())
+	c := New(NewMockStorage())
 
 	for _, v := range tests {
 		got, err := c.DGet(v.key, v.field)
@@ -233,7 +233,7 @@ func TestCore_DKeys(t *testing.T) {
 		{"dict", nil, []string{"banana", "測試"}},
 	}
 
-	c := New(NewMockEngine())
+	c := New(NewMockStorage())
 
 	for _, v := range tests {
 		got, err := c.DKeys(v.key)
@@ -262,7 +262,7 @@ func TestCore_DSet(t *testing.T) {
 		{"dict", "banana", "mango", nil, 0},
 	}
 
-	c := New(NewMockEngine())
+	c := New(NewMockStorage())
 
 	for _, v := range tests {
 		count, err := c.DSet(v.key, v.field, []byte(v.value))
@@ -294,7 +294,7 @@ func TestCore_DGetAll(t *testing.T) {
 		{"dict", map[string]string{"banana": "mama", "測試": "別れ、比類のない"}, nil},
 	}
 
-	c := New(NewMockEngine())
+	c := New(NewMockStorage())
 
 	for _, v := range tests {
 		result, err := c.DGetAll(v.key)
@@ -329,7 +329,7 @@ func TestCore_DDel(t *testing.T) {
 		{"dict", []string{"banana", "nothing"}, nil, []string{"測試"}, 1},
 	}
 
-	c := New(NewMockEngine())
+	c := New(NewMockStorage())
 
 	for _, v := range tests {
 		count, err := c.DDel(v.key, v.fields)
@@ -361,7 +361,7 @@ func TestCore_LLen(t *testing.T) {
 		{"list", nil, 3},
 	}
 
-	c := New(NewMockEngine())
+	c := New(NewMockStorage())
 
 	for _, v := range tests {
 		got, err := c.LLen(v.key)
@@ -399,7 +399,7 @@ func TestCore_LRange(t *testing.T) {
 		{"list", -1, -1, nil, []string{"Abba"}},
 	}
 
-	c := New(NewMockEngine())
+	c := New(NewMockStorage())
 
 	for _, v := range tests {
 		result, err := c.LRange(v.key, v.start, v.stop)
@@ -436,7 +436,7 @@ func TestCore_LIndex(t *testing.T) {
 		{"list", -10, ErrNotFound, ""},
 	}
 
-	c := New(NewMockEngine())
+	c := New(NewMockStorage())
 
 	for _, v := range tests {
 		result, err := c.LIndex(v.key, v.index)
@@ -468,7 +468,7 @@ func TestCore_LSet(t *testing.T) {
 		{"list", -10, ErrInvalidIndex, ""},
 	}
 
-	c := New(NewMockEngine())
+	c := New(NewMockStorage())
 
 	for _, v := range tests {
 		err := c.LSet(v.key, v.index, []byte(v.value))
@@ -496,7 +496,7 @@ func TestCore_LPush(t *testing.T) {
 		{"list", nil, []string{"a", "b", "c", "d", "e", "AC/DC"}, []string{"AC/DC", "e", "d", "c", "b", "a", "KMFDM", "Rammstein", "Abba"}},
 	}
 
-	c := New(NewMockEngine())
+	c := New(NewMockStorage())
 
 	for _, v := range tests {
 		values := make([][]byte, len(v.values))
@@ -540,7 +540,7 @@ func TestCore_LPop(t *testing.T) {
 		{"list", ErrNotFound, "", []string{}},
 	}
 
-	c := New(NewMockEngine())
+	c := New(NewMockStorage())
 
 	for _, v := range tests {
 		value, err := c.LPop(v.key)
@@ -610,7 +610,7 @@ func TestCore_concurrency(t *testing.T) {
 	}
 	tests = append(tests, longTest)
 
-	c := New(NewHashEngine())
+	c := New(NewStorageHash())
 
 	stopCollector := make(chan struct{})
 	go coreCollectWorker(c, stopCollector)
@@ -625,7 +625,7 @@ func TestCore_concurrency(t *testing.T) {
 	stopCollector <- struct{}{}
 
 	// Due to last operation of every coreConcurrencyWorker is AddOrReplace() for last keyset
-	// after all workers done, only last keyset  should remain in the engine
+	// after all workers done, only last keyset  should remain in the storage
 	got := c.Keys("*")
 	want := append([]string{}, tests[0].bytes...)
 	want = append(want, tests[0].list...)
@@ -726,7 +726,7 @@ func collectExpiredTestRunner(
 
 	expirationTimer := time.After(time.Duration(maxTtl) * time.Millisecond)
 
-	e := NewHashEngine()
+	e := NewStorageHash()
 	e.data = data
 	c := New(e)
 	stopCollector := make(chan struct{})
@@ -840,8 +840,8 @@ func TestCore_SetEx(t *testing.T) {
 		{"expired", "not expired", 12, "not expired"},
 	}
 
-	engine := NewMockEngine()
-	c := New(engine)
+	storage := NewMockStorage()
+	c := New(storage)
 
 	for _, v := range tests {
 		c.SetEx(v.key, v.ttl, []byte(v.value))
@@ -849,8 +849,8 @@ func TestCore_SetEx(t *testing.T) {
 		if string(got) != v.wantValue {
 			t.Errorf("SetEx(%q) got: %q != %q", v.key, string(got), v.value)
 		}
-		if got != nil && engine.data[v.key].Ttl() != v.ttl {
-			t.Errorf("SetEx(%q) ttl: %d != %d, %q", v.key, engine.data[v.key].Ttl(), v.ttl, engine.data[v.key])
+		if got != nil && storage.data[v.key].Ttl() != v.ttl {
+			t.Errorf("SetEx(%q) ttl: %d != %d, %q", v.key, storage.data[v.key].Ttl(), v.ttl, storage.data[v.key])
 		}
 	}
 }
@@ -865,15 +865,15 @@ func TestCore_Persist(t *testing.T) {
 		{"expired", 0},
 	}
 
-	engine := NewMockEngine()
-	c := New(engine)
+	storage := NewMockStorage()
+	c := New(storage)
 
 	for _, v := range tests {
 		result := c.Persist(v.key)
 		if result != v.wantResult {
 			t.Errorf("Persist(%q) result: %q != %q", v.key, result, v.wantResult)
 		}
-		if result == 1 && engine.data[v.key].HasTtl() {
+		if result == 1 && storage.data[v.key].HasTtl() {
 			t.Errorf("Persist(%q): item still volatile", v.key)
 		}
 	}
@@ -891,8 +891,8 @@ func TestCore_Expire(t *testing.T) {
 		{"expired", 12, 0, false},
 	}
 
-	engine := NewMockEngine()
-	c := New(engine)
+	storage := NewMockStorage()
+	c := New(storage)
 
 	for _, v := range tests {
 		result := c.Expire(v.key, v.ttl)
@@ -902,8 +902,8 @@ func TestCore_Expire(t *testing.T) {
 		if got, _ := c.Get(v.key); v.wantExists != (got != nil) {
 			t.Errorf("Expire(%q) existanse: %t != %t", v.key, got != nil, v.wantExists)
 		}
-		if v.wantExists && engine.data[v.key].Ttl() != v.ttl {
-			t.Errorf("Expire(%q) ttl: %d != %d", v.key, engine.data[v.key].Ttl(), v.ttl)
+		if v.wantExists && storage.data[v.key].Ttl() != v.ttl {
+			t.Errorf("Expire(%q) ttl: %d != %d", v.key, storage.data[v.key].Ttl(), v.ttl)
 		}
 	}
 }
@@ -919,7 +919,7 @@ func TestCore_Ttl(t *testing.T) {
 		{"expired", -2, nil},
 	}
 
-	c := New(NewMockEngine())
+	c := New(NewMockStorage())
 
 	for _, v := range tests {
 		ttl, err := c.Ttl(v.key)

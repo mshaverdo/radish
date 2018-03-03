@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func getSampleDataHashEngine() map[string]*Item {
+func getSampleDataStorageHash() map[string]*Item {
 	return map[string]*Item{
 		"bytes": NewItemBytes([]byte("Призрак бродит по Европе - призрак коммунизма.")),
 		"dict": NewItemDict(map[string][]byte{
@@ -26,9 +26,9 @@ func getSampleDataHashEngine() map[string]*Item {
 	}
 }
 
-func TestHashEngine_Get(t *testing.T) {
-	data := getSampleDataHashEngine()
-	e := NewHashEngine()
+func TestStorageHash_Get(t *testing.T) {
+	data := getSampleDataStorageHash()
+	e := NewStorageHash()
 	e.data = data
 
 	for key, item := range data {
@@ -39,8 +39,8 @@ func TestHashEngine_Get(t *testing.T) {
 	}
 }
 
-func TestHashEngine_GetSubmap(t *testing.T) {
-	data := getSampleDataHashEngine()
+func TestStorageHash_GetSubmap(t *testing.T) {
+	data := getSampleDataStorageHash()
 
 	tests := []struct {
 		keys []string
@@ -52,7 +52,7 @@ func TestHashEngine_GetSubmap(t *testing.T) {
 		},
 	}
 
-	e := NewHashEngine()
+	e := NewStorageHash()
 	e.data = data
 
 	for _, v := range tests {
@@ -63,12 +63,12 @@ func TestHashEngine_GetSubmap(t *testing.T) {
 	}
 }
 
-func TestHashEngine_AddOrReplace(t *testing.T) {
+func TestStorageHash_AddOrReplace(t *testing.T) {
 	tests := []map[string]*Item{
 		{"測試": NewItemBytes([]byte("value of 測試")), "list": NewItemBytes([]byte("value of list"))},
 	}
-	data := getSampleDataHashEngine()
-	e := NewHashEngine()
+	data := getSampleDataStorageHash()
+	e := NewStorageHash()
 	e.data = data
 
 	for _, v := range tests {
@@ -82,9 +82,9 @@ func TestHashEngine_AddOrReplace(t *testing.T) {
 	}
 }
 
-func TestHashEngine_Keys(t *testing.T) {
-	data := getSampleDataHashEngine()
-	e := NewHashEngine()
+func TestStorageHash_Keys(t *testing.T) {
+	data := getSampleDataStorageHash()
+	e := NewStorageHash()
 	e.data = data
 
 	want := []string{}
@@ -101,7 +101,7 @@ func TestHashEngine_Keys(t *testing.T) {
 	}
 }
 
-func TestHashEngine_Del(t *testing.T) {
+func TestStorageHash_Del(t *testing.T) {
 	tests := []struct {
 		keys, want []string
 	}{
@@ -109,8 +109,8 @@ func TestHashEngine_Del(t *testing.T) {
 		{[]string{"bytes", "dict"}, []string{"list"}},
 	}
 
-	data := getSampleDataHashEngine()
-	e := NewHashEngine()
+	data := getSampleDataStorageHash()
+	e := NewStorageHash()
 	e.data = data
 
 	for _, v := range tests {
@@ -125,8 +125,8 @@ func TestHashEngine_Del(t *testing.T) {
 	}
 }
 
-func TestHashEngine_DelSubmap(t *testing.T) {
-	data := getSampleDataHashEngine()
+func TestStorageHash_DelSubmap(t *testing.T) {
+	data := getSampleDataStorageHash()
 
 	tests := []struct {
 		submap    map[string]*Item
@@ -145,7 +145,7 @@ func TestHashEngine_DelSubmap(t *testing.T) {
 		},
 	}
 
-	e := NewHashEngine()
+	e := NewStorageHash()
 	e.data = data
 
 	for _, v := range tests {
@@ -165,7 +165,7 @@ func TestHashEngine_DelSubmap(t *testing.T) {
 	}
 }
 
-func TestHashEngine_concurrency(t *testing.T) {
+func TestStorageHash_concurrency(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -183,17 +183,17 @@ func TestHashEngine_concurrency(t *testing.T) {
 	}
 	tests = append(tests, keys)
 
-	e := NewHashEngine()
+	e := NewStorageHash()
 	var wg sync.WaitGroup
 	for i := 0; i < 1000; i++ {
 		wg.Add(1)
-		go hashEngineWorker(&wg, e, tests)
+		go StorageHashWorker(&wg, e, tests)
 	}
 
 	wg.Wait()
 
-	// Due to last operation of every hashEngineWorker is AddOrReplace() for last keyset
-	// after all workers done, only last keyset  should remain in the engine
+	// Due to last operation of every StorageHashWorker is AddOrReplace() for last keyset
+	// after all workers done, only last keyset  should remain in the storage
 	got := e.Keys()
 	want := tests[len(tests)-1]
 	sort.Strings(got)
@@ -203,7 +203,7 @@ func TestHashEngine_concurrency(t *testing.T) {
 	}
 }
 
-func hashEngineWorker(wg *sync.WaitGroup, e *HashEngine, tests [][]string) {
+func StorageHashWorker(wg *sync.WaitGroup, e *StorageHash, tests [][]string) {
 	var items map[string]*Item
 	for _, v := range tests {
 		items = map[string]*Item{}

@@ -9,32 +9,27 @@ import (
 	"sync"
 )
 
-// register HashEngine as Engine implementation for GOB
-func init() {
-	gob.Register(&HashEngine{})
-}
-
 //For in-memory storage (not on disc) hashmap should be faster thar b-tree
-type HashEngine struct {
+type StorageHash struct {
 	mu sync.RWMutex
 
 	data map[string]*Item
 }
 
-// NewHashEngine constructs new  HashEngine instance
-func NewHashEngine() *HashEngine {
-	return &HashEngine{data: make(map[string]*Item)}
+// NewStorageHash constructs new  StorageHash instance
+func NewStorageHash() *StorageHash {
+	return &StorageHash{data: make(map[string]*Item)}
 }
 
 // Get returns reference to Item by key. If Item not exists, return nil
-func (e *HashEngine) Get(key string) (item *Item) {
+func (e *StorageHash) Get(key string) (item *Item) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.data[key]
 }
 
 // Get returns *Items mapped to provided keys.
-func (e *HashEngine) GetSubmap(keys []string) (submap map[string]*Item) {
+func (e *StorageHash) GetSubmap(keys []string) (submap map[string]*Item) {
 	submap = make(map[string]*Item, len(keys))
 
 	e.mu.RLock()
@@ -49,8 +44,8 @@ func (e *HashEngine) GetSubmap(keys []string) (submap map[string]*Item) {
 	return submap
 }
 
-// Keys returns all keys existing in the Engine
-func (e *HashEngine) Keys() (keys []string) {
+// Keys returns all keys existing in the Storage
+func (e *StorageHash) Keys() (keys []string) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
@@ -62,20 +57,20 @@ func (e *HashEngine) Keys() (keys []string) {
 	return keys
 }
 
-// AddOrReplace adds new or replaces existing Items in the engine
-func (e *HashEngine) AddOrReplace(items map[string]*Item) {
+// AddOrReplace adds new or replaces existing Items in the storage
+func (e *StorageHash) AddOrReplace(items map[string]*Item) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	for k, item := range items {
-		assert.True(item != nil, "trying to add nil *Item into Engine")
+		assert.True(item != nil, "trying to add nil *Item into Storage")
 		e.data[k] = item
 	}
 }
 
-// Del removes values from engine and returns count of actually removed values
-// if key not found in the engine, just skip it
-func (e *HashEngine) Del(keys []string) (count int) {
+// Del removes values from storage and returns count of actually removed values
+// if key not found in the storage, just skip it
+func (e *StorageHash) Del(keys []string) (count int) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -91,8 +86,8 @@ func (e *HashEngine) Del(keys []string) (count int) {
 }
 
 // DelSubmap removes Items only if existing *Item equals to provided submap[key]
-// if key not found in the engine, just skip it and returns count of actually deleted items
-func (e *HashEngine) DelSubmap(submap map[string]*Item) (count int) {
+// if key not found in the storage, just skip it and returns count of actually deleted items
+func (e *StorageHash) DelSubmap(submap map[string]*Item) (count int) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -106,15 +101,15 @@ func (e *HashEngine) DelSubmap(submap map[string]*Item) (count int) {
 	return count
 }
 
-// Persist dumps storage engine data into provided Writer
-func (e *HashEngine) Persist(w io.Writer, lastMessageId int64) error {
+// Persist dumps storage storage data into provided Writer
+func (e *StorageHash) Persist(w io.Writer, lastMessageId int64) error {
 	e.fullLock()
 	defer e.fullUnlock()
 
 	encoder := gob.NewEncoder(w)
 
 	if err := encoder.Encode(lastMessageId); err != nil {
-		return fmt.Errorf("HashEngine.Persist(): can't encode messageId: %s", err)
+		return fmt.Errorf("StorageHash.Persist(): can't encode messageId: %s", err)
 	}
 
 	exp := &gobExportItem{}
@@ -127,7 +122,7 @@ func (e *HashEngine) Persist(w io.Writer, lastMessageId int64) error {
 		exp.Dict = v.dict
 
 		if err := encoder.Encode(exp); err != nil {
-			return fmt.Errorf("HashEngine.Persist(): can't encode messageId: %s", err)
+			return fmt.Errorf("StorageHash.Persist(): can't encode messageId: %s", err)
 			return err
 		}
 	}
@@ -135,26 +130,26 @@ func (e *HashEngine) Persist(w io.Writer, lastMessageId int64) error {
 	return nil
 }
 
-// Load loads storage engine data from Reader
-func (e *HashEngine) Load(r io.Reader) (lastMessageId int64, err error) {
+// Load loads storage storage data from Reader
+func (e *StorageHash) Load(r io.Reader) (lastMessageId int64, err error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	if len(e.data) != 0 {
-		return 0, errors.New("HashEngine.Load(): restore enabled only on empty engine")
+		return 0, errors.New("StorageHash.Load(): restore enabled only on empty storage")
 	}
 
 	decoder := gob.NewDecoder(r)
 
 	if err := decoder.Decode(&lastMessageId); err != nil {
-		return 0, fmt.Errorf("HashEngine.Load(): can't decode messageId: %s", err)
+		return 0, fmt.Errorf("StorageHash.Load(): can't decode messageId: %s", err)
 	}
 
 	e.data = make(map[string]*Item)
 	exp := new(gobExportItem)
 	for err := decoder.Decode(exp); err != io.EOF; err = decoder.Decode(exp) {
 		if err != nil {
-			return 0, fmt.Errorf("HashEngine.Load(): can't decode item: %s", err)
+			return 0, fmt.Errorf("StorageHash.Load(): can't decode item: %s", err)
 		}
 
 		e.data[exp.Key] = new(Item)
@@ -170,8 +165,8 @@ func (e *HashEngine) Load(r io.Reader) (lastMessageId int64, err error) {
 	return lastMessageId, nil
 }
 
-// FullLock locks engine and all items to ensure exclusive access to its content
-func (e *HashEngine) fullLock() {
+// FullLock locks storage and all items to ensure exclusive access to its content
+func (e *StorageHash) fullLock() {
 	e.mu.Lock()
 
 	for _, v := range e.data {
@@ -179,8 +174,8 @@ func (e *HashEngine) fullLock() {
 	}
 }
 
-// FullUnlock unlocks engine and all items
-func (e *HashEngine) fullUnlock() {
+// FullUnlock unlocks storage and all items
+func (e *StorageHash) fullUnlock() {
 	for _, v := range e.data {
 		v.Unlock()
 	}
