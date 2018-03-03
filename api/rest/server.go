@@ -1,4 +1,4 @@
-package httpserver
+package rest
 
 import (
 	"bytes"
@@ -20,8 +20,8 @@ const (
 	StatusHeader = "X-Radish-Status"
 )
 
-// HttpServer is a implementation of HttpServer interface
-type HttpServer struct {
+// Server is a implementation of Server interface
+type Server struct {
 	http.Server
 	messageHandler MessageHandler
 	stopChan       chan struct{}
@@ -32,12 +32,12 @@ type MessageHandler interface {
 	HandleMessage(request *message.Request) message.Response
 }
 
-// New Returns new instance of Radish HTTP server
-func New(host string, port int, messageHandler MessageHandler) *HttpServer {
+// NewServer Returns new instance of Radish HTTP server
+func NewServer(host string, port int, messageHandler MessageHandler) *Server {
 	// use server instance instead of http.ListenAndServe -- due to we should use graceful shutdown
 	addr := fmt.Sprintf("%s:%d", host, port)
 
-	s := HttpServer{
+	s := Server{
 		Server:         http.Server{Addr: addr},
 		messageHandler: messageHandler,
 		stopChan:       make(chan struct{}),
@@ -49,7 +49,7 @@ func New(host string, port int, messageHandler MessageHandler) *HttpServer {
 }
 
 // ListenAndServe statrs listening to incoming connections
-func (s *HttpServer) ListenAndServe() error {
+func (s *Server) ListenAndServe() error {
 	if err := s.Server.ListenAndServe(); err == http.ErrServerClosed {
 		<-s.stopChan // wait for full shutdown
 		return nil
@@ -59,12 +59,12 @@ func (s *HttpServer) ListenAndServe() error {
 }
 
 // Stops accepting new requests by HTTP server, but not causes return from ListenAndServe() until Shutdown()
-func (s *HttpServer) Stop() error {
+func (s *Server) Stop() error {
 	return s.Server.Shutdown(context.TODO())
 }
 
 // Shutdown gracefully shuts server down
-func (s *HttpServer) Shutdown() error {
+func (s *Server) Shutdown() error {
 	defer close(s.stopChan)
 	return s.Stop()
 }
@@ -74,7 +74,7 @@ func (s *HttpServer) Shutdown() error {
 // sends it to MessageHandler, waits until message processed,
 // receives message.Response, corresponding to sent Request
 // and transorms message.Response into HTTP response
-func (s *HttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var (
 		request  *message.Request
 		response message.Response

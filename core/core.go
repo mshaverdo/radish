@@ -86,7 +86,7 @@ func (c *Core) CollectExpired() (count int) {
 
 /*
   Public methods could be featured as API Commands, available via HTTP, RESP, etc external API using @tags, one per line
-  This tags used by codegen/processor to generate message-to-core bindings
+  This tags used by tools/gen-processor to generate message-to-core bindings
 
   @command <LABEL>			- feature method as command with label <LABEL>. E.g. KEYS, GET, SET...
   @modifying				- command modifies storage and should be logged into WAL

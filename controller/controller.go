@@ -2,8 +2,8 @@ package controller
 
 import (
 	"errors"
-	"github.com/mshaverdo/radish/controller/httpserver"
-	"github.com/mshaverdo/radish/controller/respserver"
+	"github.com/mshaverdo/radish/api/resp"
+	"github.com/mshaverdo/radish/api/rest"
 	"github.com/mshaverdo/radish/core"
 	"github.com/mshaverdo/radish/log"
 	"github.com/mshaverdo/radish/message"
@@ -96,7 +96,7 @@ var (
 	ErrServerShutdown = errors.New("server shutdown")
 )
 
-//go:generate go run ../codegen/processor/main.go
+//go:generate go run ../tools/gen-processor/main.go
 
 type Controller struct {
 	host                   string
@@ -140,9 +140,9 @@ func New(
 	}
 
 	if useHttp {
-		c.srv = httpserver.New(host, port, &c)
+		c.srv = rest.NewServer(host, port, &c)
 	} else {
-		c.srv = respserver.New(host, port, &c)
+		c.srv = resp.NewServer(host, port, &c)
 	}
 
 	c.processor = NewProcessor(c.core)

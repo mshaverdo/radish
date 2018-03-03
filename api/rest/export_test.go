@@ -1,4 +1,4 @@
-package httpserver
+package rest
 
 import (
 	"github.com/mshaverdo/radish/message"

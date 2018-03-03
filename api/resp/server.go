@@ -1,4 +1,4 @@
-package respserver
+package resp
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-type RespServer struct {
+type Server struct {
 	host           string
 	port           int
 	server         *redcon.Server
@@ -17,16 +17,16 @@ type RespServer struct {
 }
 
 //TODO: возвращать ошибку на неизвестные команды
-//TODO: этот интерфейс уже определен в httpserver. решить ,чт ос ним делать.
+//TODO: этот интерфейс уже определен в rest. решить ,чт ос ним делать.
 //TODO: set expiration! должен корректно обрабатывать команды SET <key> <value> EX <seconds>
 // MessageHandler processes a Request message and return a response message
 type MessageHandler interface {
 	HandleMessage(request *message.Request) message.Response
 }
 
-// New Returns new instance of RespServer
-func New(host string, port int, messageHandler MessageHandler) *RespServer {
-	s := RespServer{
+// NewServer Returns new instance of Server
+func NewServer(host string, port int, messageHandler MessageHandler) *Server {
+	s := Server{
 		messageHandler: messageHandler,
 		stopChan:       make(chan struct{}),
 		host:           host,
@@ -45,7 +45,7 @@ func New(host string, port int, messageHandler MessageHandler) *RespServer {
 }
 
 // ListenAndServe statrs listening to incoming connections
-func (s *RespServer) ListenAndServe() error {
+func (s *Server) ListenAndServe() error {
 	err := s.server.ListenAndServe()
 
 	if err == nil {
@@ -57,17 +57,17 @@ func (s *RespServer) ListenAndServe() error {
 }
 
 // Stops accepting new requests by Resp server, but not causes return from ListenAndServe() until Shutdown()
-func (s *RespServer) Stop() error {
+func (s *Server) Stop() error {
 	return s.server.Close()
 }
 
 // Shutdown gracefully shuts server down
-func (s *RespServer) Shutdown() error {
+func (s *Server) Shutdown() error {
 	defer close(s.stopChan)
 	return s.Stop()
 }
 
-func (s *RespServer) handler(conn redcon.Conn, command redcon.Command) {
+func (s *Server) handler(conn redcon.Conn, command redcon.Command) {
 	pipelineCommands := conn.ReadPipeline()
 	unreliable := len(pipelineCommands) > 0
 
@@ -77,7 +77,7 @@ func (s *RespServer) handler(conn redcon.Conn, command redcon.Command) {
 	}
 }
 
-func (s *RespServer) processRequest(conn redcon.Conn, command redcon.Command, unreliable bool) {
+func (s *Server) processRequest(conn redcon.Conn, command redcon.Command, unreliable bool) {
 	argsCount := len(command.Args)
 	if argsCount == 0 {
 		// redcon souldn't pass empty commands here, but...
