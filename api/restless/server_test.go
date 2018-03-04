@@ -1,10 +1,10 @@
-package rest_test
+package restless_test
 
 import (
 	"bytes"
 	"errors"
 	"github.com/go-test/deep"
-	"github.com/mshaverdo/radish/api/rest"
+	"github.com/mshaverdo/radish/api/restless"
 	"github.com/mshaverdo/radish/log"
 	"github.com/mshaverdo/radish/message"
 	"io/ioutil"
@@ -58,17 +58,17 @@ func TestHttpServer_SendResponse(t *testing.T) {
 
 	for n, tst := range tests {
 		recorder := httptest.NewRecorder()
-		rest.SendResponse(tst.response, recorder)
+		restless.SendResponse(tst.response, recorder)
 
 		if recorder.Code != tst.wantHttpStatus {
 			t.Errorf("testcase %d: %q Invalid status code: got %d, want %d", n, tst.response.Status(), recorder.Code, tst.wantHttpStatus)
 		}
 
-		if recorder.Header().Get(rest.StatusHeader) != tst.response.Status().String() {
+		if recorder.Header().Get(restless.StatusHeader) != tst.response.Status().String() {
 			t.Errorf(
 				"testcase %d: Invalid radish status code: got %q, want %q",
 				n,
-				recorder.Header().Get(rest.StatusHeader),
+				recorder.Header().Get(restless.StatusHeader),
 				tst.response.Status().String(),
 			)
 		}
@@ -147,7 +147,7 @@ func TestHttpServer_ParseRequest(t *testing.T) {
 
 	for _, tst := range tests {
 		httpRequest := newMockRequest(tst.usePost, tst.url, tst.payload, tst.multiPayloads)
-		request, err := rest.ParseRequest(httpRequest)
+		request, err := restless.ParseRequest(httpRequest)
 
 		if err != tst.wantErr && (err == nil || tst.wantErr == nil || err.Error() != tst.wantErr.Error()) {
 			t.Errorf("%q : err got %q, want %q", tst.url, err, tst.wantErr)

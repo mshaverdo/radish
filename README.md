@@ -5,7 +5,7 @@ with per-key TTL and disk persistence.
 
 ## Components
 - `radish-server    ` - The server
-- `radish-benchmark ` - The server benchmarking tool
+- `radish-benchmark ` - The server HTTP API benchmarking tool
 
 ## Getting Started
 
@@ -53,11 +53,13 @@ To get server built-in cli hint:
 $ ./radish-benchmark --help
 ```
 
-Run standard benchmark for localhost server with 20 threads, 100k requests, SET, GET, LPUSH, LPOP operations:
+Run standard HTTP API benchmark for localhost server with 20 threads, 100k requests, SET, GET, LPUSH, LPOP operations:
 
 ```
 $ ./radish-benchmark
 ```
+
+
 
 Running only GET & SET tests, 1M requests, with 1M keyspace len on Amazon t2.2xlarge instance:
 ```

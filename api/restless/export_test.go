@@ -1,4 +1,4 @@
-package rest
+package restless
 
 import (
 	"github.com/mshaverdo/radish/message"

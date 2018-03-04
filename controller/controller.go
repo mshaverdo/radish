@@ -3,7 +3,7 @@ package controller
 import (
 	"errors"
 	"github.com/mshaverdo/radish/api/resp"
-	"github.com/mshaverdo/radish/api/rest"
+	"github.com/mshaverdo/radish/api/restless"
 	"github.com/mshaverdo/radish/core"
 	"github.com/mshaverdo/radish/log"
 	"github.com/mshaverdo/radish/message"
@@ -23,7 +23,7 @@ type ApiServer interface {
 	Shutdown() error
 }
 
-var _ ApiServer = (*rest.Server)(nil)
+var _ ApiServer = (*restless.Server)(nil)
 var _ ApiServer = (*resp.Server)(nil)
 
 // Core provides domain operations on the storage -- Get, Set, Keys, etc.
@@ -145,7 +145,7 @@ func New(
 	}
 
 	if useHttp {
-		c.srv = rest.NewServer(host, port, &c)
+		c.srv = restless.NewServer(host, port, &c)
 	} else {
 		c.srv = resp.NewServer(host, port, &c)
 	}
