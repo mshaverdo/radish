@@ -65,32 +65,26 @@ func (i *Item) Kind() ItemKind {
 }
 
 func (i *Item) Bytes() []byte {
-	assert.True(i.kind == Bytes, "trying to get Bytes value on "+i.kind.String())
 	return i.bytes
 }
 
 func (i *Item) SetBytes(v []byte) {
-	assert.True(i.kind == Bytes, "trying to set Bytes value on "+i.kind.String())
 	i.bytes = v
 }
 
 func (i *Item) List() [][]byte {
-	assert.True(i.kind == List, "trying to get List value on "+i.kind.String())
 	return i.list
 }
 
 func (i *Item) SetList(v [][]byte) {
-	assert.True(i.kind == List, "trying to set List value on "+i.kind.String())
 	i.list = v
 }
 
 func (i *Item) Dict() map[string][]byte {
-	assert.True(i.kind == Dict, "trying to get Dict value on "+i.kind.String())
 	return i.dict
 }
 
 func (i *Item) SetDict(v map[string][]byte) {
-	assert.True(i.kind == Dict, "trying to set Dict value on "+i.kind.String())
 	i.dict = v
 }
 
@@ -122,12 +116,10 @@ func (i *Item) String() string {
 }
 
 func (i *Item) SetTtl(seconds int) {
-	assert.True(seconds > 0, "Trying to set non-positive TTL. To reset TTL use Item.RemoveTtl()")
 	i.expireAt = time.Now().Add(time.Duration(seconds) * time.Second)
 }
 
 func (i *Item) SetMilliTtl(milliseconds int) {
-	assert.True(milliseconds > 0, "Trying to set non-positive TTL. To reset TTL use Item.RemoveTtl()")
 	i.expireAt = time.Now().Add(time.Duration(milliseconds) * time.Millisecond)
 }
 

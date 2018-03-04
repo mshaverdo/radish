@@ -23,8 +23,9 @@ func NewStorageHash() *StorageHash {
 // Get returns reference to Item by key. If Item not exists, return nil
 func (e *StorageHash) Get(key string) (item *Item) {
 	e.mu.RLock()
-	defer e.mu.RUnlock()
-	return e.data[key]
+	item = e.data[key]
+	e.mu.RUnlock()
+	return item
 }
 
 // Get returns *Items mapped to provided keys.
@@ -32,13 +33,12 @@ func (e *StorageHash) GetSubmap(keys []string) (submap map[string]*Item) {
 	submap = make(map[string]*Item, len(keys))
 
 	e.mu.RLock()
-	defer e.mu.RUnlock()
-
 	for _, key := range keys {
 		if item, ok := e.data[key]; ok {
 			submap[key] = item
 		}
 	}
+	e.mu.RUnlock()
 
 	return submap
 }
@@ -46,12 +46,11 @@ func (e *StorageHash) GetSubmap(keys []string) (submap map[string]*Item) {
 // Keys returns all keys existing in the Storage
 func (e *StorageHash) Keys() (keys []string) {
 	e.mu.RLock()
-	defer e.mu.RUnlock()
-
 	keys = make([]string, 0, len(e.data))
 	for k := range e.data {
 		keys = append(keys, k)
 	}
+	e.mu.RUnlock()
 
 	return keys
 }
@@ -67,8 +66,6 @@ func (e *StorageHash) AddOrReplaceOne(key string, item *Item) {
 // if key not found in the storage, just skip it
 func (e *StorageHash) Del(keys []string) (count int) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
-
 	for _, k := range keys {
 		if _, ok := e.data[k]; ok {
 			count++
@@ -76,6 +73,7 @@ func (e *StorageHash) Del(keys []string) (count int) {
 
 		delete(e.data, k)
 	}
+	e.mu.Unlock()
 
 	return count
 }
@@ -84,14 +82,13 @@ func (e *StorageHash) Del(keys []string) (count int) {
 // if key not found in the storage, just skip it and returns count of actually deleted items
 func (e *StorageHash) DelSubmap(submap map[string]*Item) (count int) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
-
 	for key, item := range submap {
 		if existingItem, ok := e.data[key]; ok && existingItem == item {
 			count++
 			delete(e.data, key)
 		}
 	}
+	e.mu.Unlock()
 
 	return count
 }

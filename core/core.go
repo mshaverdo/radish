@@ -677,11 +677,12 @@ func (c *Core) getItem(key string) *Item {
 	}
 
 	item.RLock()
-	defer item.RUnlock()
 
 	if item.IsExpired() {
+		item.RUnlock()
 		return nil
 	}
 
+	item.RUnlock()
 	return item
 }
