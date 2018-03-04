@@ -324,7 +324,9 @@ func (k *Keeper) persistStorage() error {
 
 	w := bufio.NewWriter(file)
 	err = persistable.Persist(w, k.messageId)
-	w.Flush()
+	if err == nil {
+		err = w.Flush()
+	}
 	if err != nil {
 		return fmt.Errorf("Keeper.persistStorage(): %s", err)
 	}
@@ -436,7 +438,10 @@ func (k *Keeper) runSnapshotUpdater() {
 		case <-k.stopChan:
 			return
 		case <-tick:
-			k.updateSnapshot()
+			err := k.updateSnapshot()
+			if err != nil {
+				log.Errorf("Update snapshot failed: %s", err)
+			}
 		}
 	}
 }

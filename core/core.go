@@ -65,13 +65,13 @@ func (c *Core) CollectExpired() (count int) {
 	//TODO: check performance, it could freeze writing operations for a long time!
 	allKeys := c.storage.Keys()
 
+	expiredItems := map[string]*Item{}
 	for len(allKeys) > 0 {
 		batchLen := int(math.Min(float64(CollectExpiredBatchSize), float64(len(allKeys))))
 		batch := allKeys[:batchLen]
 		allKeys = allKeys[batchLen:]
 
 		items := c.storage.GetSubmap(batch)
-		expiredItems := map[string]*Item{}
 		for key, item := range items {
 			item.RLock()
 			if item.IsExpired() {
@@ -80,8 +80,15 @@ func (c *Core) CollectExpired() (count int) {
 			item.RUnlock()
 		}
 
-		count += c.storage.DelSubmap(expiredItems)
+		if len(expiredItems) > CollectExpiredBatchSize {
+			deleted := c.storage.DelSubmap(expiredItems)
+			//log.Debugf("%d KEYS deleted", deleted)
+			count += deleted
+			expiredItems = map[string]*Item{}
+		}
 	}
+
+	count += c.storage.DelSubmap(expiredItems)
 
 	return count
 }

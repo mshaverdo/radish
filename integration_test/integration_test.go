@@ -478,6 +478,7 @@ func Test_LPop(t *testing.T) {
 func Test_TTL(t *testing.T) {
 	tests := []TestCase{
 		{[]interface{}{"key1"}, `-1s`, ``},
+		{[]interface{}{"key3"}, `1h0m0s`, ``},
 		{[]interface{}{""}, `-1s`, ``},
 		{[]interface{}{"404"}, `-2s`, ``},
 	}

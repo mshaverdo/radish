@@ -61,6 +61,9 @@ func (gd *GencodeDecoder) Decode(val Unmarshaller) error {
 	var sizeUint64 uint64
 	err := binary.Read(gd.reader, binary.LittleEndian, &sizeUint64)
 	if err != nil {
+		if err == io.ErrUnexpectedEOF {
+			err = io.EOF
+		}
 		return err
 	}
 	size := int(sizeUint64)

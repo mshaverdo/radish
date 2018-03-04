@@ -1,8 +1,8 @@
 package controller
 
 import (
-	"github.com/mshaverdo/assert"
 	"github.com/mshaverdo/radish/core"
+	"github.com/mshaverdo/radish/log"
 	"github.com/mshaverdo/radish/message"
 )
 
@@ -24,7 +24,10 @@ func getResponseCommandError(cmd string, err error) message.Response {
 	}
 
 	status, ok := statusMap[err]
-	assert.True(ok, "unknown error: "+err.Error())
+	if !ok {
+		status = message.StatusError
+		log.Debugf("UNKNOWN ERROR: %s", err)
+	}
 
 	return message.NewResponseStatus(
 		status,

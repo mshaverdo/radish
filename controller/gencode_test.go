@@ -93,8 +93,7 @@ func TestGencodeEncoder_EncodeDecode(t *testing.T) {
 		encoder.Encode(srcRequests[i])
 	}
 	// write extra data to end of file to check broken entries skip
-	binary.Write(w, binary.LittleEndian, uint64(32))
-	binary.Write(w, binary.LittleEndian, uint64(0))
+	binary.Write(w, binary.LittleEndian, uint8(32))
 	w.Flush()
 
 	file.Seek(0, 0)
