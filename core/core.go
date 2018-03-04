@@ -32,8 +32,8 @@ type Storage interface {
 	// Get returns *Items mapped to provided keys.
 	GetSubmap(keys []string) (submap map[string]*Item)
 
-	// AddOrReplace adds new or replaces existing Items in the storage
-	AddOrReplace(items map[string]*Item)
+	// AddOrReplaceOne adds new or replaces one existing Item in the storage. It much faster than AddOrReplace with single items
+	AddOrReplaceOne(key string, item *Item)
 
 	// Del removes Items from storage and returns count of actually removed values
 	// if key not found in the storage, just skip it
@@ -167,7 +167,8 @@ func (c *Core) Get(key string) (result []byte, err error) {
 // @command SET
 // @modifying
 func (c *Core) Set(key string, value []byte) {
-	c.storage.AddOrReplace(map[string]*Item{key: NewItemBytes(value)})
+	item := NewItemBytes(value)
+	c.storage.AddOrReplaceOne(key, item)
 }
 
 // Set key to hold the string value and set key to timeout after a given number of seconds.
@@ -185,7 +186,7 @@ func (c *Core) SetEx(key string, seconds int, value []byte) {
 
 	item := NewItemBytes(value)
 	item.SetTtl(seconds)
-	c.storage.AddOrReplace(map[string]*Item{key: item})
+	c.storage.AddOrReplaceOne(key, item)
 }
 
 // Del Removes the specified keys, ignoring not existing and returns count of actually removed values.
@@ -210,7 +211,7 @@ func (c *Core) DSet(key, field string, value []byte) (count int, err error) {
 	if item == nil {
 		item = NewItemDict(map[string][]byte{})
 		defer func() {
-			c.storage.AddOrReplace(map[string]*Item{key: item})
+			c.storage.AddOrReplaceOne(key, item)
 		}()
 	}
 
@@ -529,7 +530,7 @@ func (c *Core) LPush(key string, values [][]byte) (count int, err error) {
 	if item == nil {
 		item = NewItemList([][]byte{})
 		defer func() {
-			c.storage.AddOrReplace(map[string]*Item{key: item})
+			c.storage.AddOrReplaceOne(key, item)
 		}()
 	}
 

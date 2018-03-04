@@ -55,10 +55,8 @@ func (e *MockStorage) Keys() (keys []string) {
 	return keys
 }
 
-func (e *MockStorage) AddOrReplace(items map[string]*Item) {
-	for k, item := range items {
-		e.data[k] = item
-	}
+func (e *MockStorage) AddOrReplaceOne(key string, item *Item) {
+	e.data[key] = item
 }
 
 func (e *MockStorage) Del(keys []string) (count int) {
@@ -624,7 +622,7 @@ func TestCore_concurrency(t *testing.T) {
 	wg.Wait()
 	stopCollector <- struct{}{}
 
-	// Due to last operation of every coreConcurrencyWorker is AddOrReplace() for last keyset
+	// Due to last operation of every coreConcurrencyWorker is AddOrReplaceOne() for last keyset
 	// after all workers done, only last keyset  should remain in the storage
 	got := c.Keys("*")
 	want := append([]string{}, tests[0].bytes...)

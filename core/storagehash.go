@@ -4,7 +4,6 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
-	"github.com/mshaverdo/assert"
 	"io"
 	"sync"
 )
@@ -57,15 +56,11 @@ func (e *StorageHash) Keys() (keys []string) {
 	return keys
 }
 
-// AddOrReplace adds new or replaces existing Items in the storage
-func (e *StorageHash) AddOrReplace(items map[string]*Item) {
+// AddOrReplaceOne adds new or replaces one existing Item in the storage. It much faster than AddOrReplace with single items
+func (e *StorageHash) AddOrReplaceOne(key string, item *Item) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	for k, item := range items {
-		assert.True(item != nil, "trying to add nil *Item into Storage")
-		e.data[k] = item
-	}
+	e.data[key] = item
+	e.mu.Unlock()
 }
 
 // Del removes values from storage and returns count of actually removed values

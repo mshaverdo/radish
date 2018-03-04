@@ -210,22 +210,26 @@ func (c *Controller) Shutdown() {
 
 // HandleMessage processes Request and return Response
 func (c *Controller) HandleMessage(request *message.Request) message.Response {
-	if !c.isRunning() {
+	select {
+	case <-c.stopChan:
 		return getResponseCommandError(request.Cmd, ErrServerShutdown)
+	default:
+		//all ok, handle message
 	}
 
 	// It's OK to do wg.Add() inside a goroutine, due to c.stop() invoked BEFORE c.handlerWg.Wait()
 	c.handlerWg.Add(1)
-	defer c.handlerWg.Done()
 
 	response := c.processor.Process(request)
 
 	if c.isPersistent && response.Status() == message.StatusOk && c.processor.IsModifyingRequest(request) {
 		if err := c.keeper.WriteToWal(request); err != nil {
+			c.handlerWg.Done()
 			return getResponseCommandError(request.Cmd, err)
 		}
 	}
 
+	c.handlerWg.Done()
 	return response
 }
 

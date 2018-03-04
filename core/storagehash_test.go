@@ -69,21 +69,19 @@ func TestStorageHash_GetSubmap(t *testing.T) {
 	}
 }
 
-func TestStorageHash_AddOrReplace(t *testing.T) {
-	tests := []map[string]*Item{
-		{"測試": NewItemBytes([]byte("value of 測試")), "list": NewItemBytes([]byte("value of list"))},
+func TestStorageHash_AddOrReplaceOne(t *testing.T) {
+	tests := map[string]*Item{
+		"測試": NewItemBytes([]byte("value of 測試")), "list": NewItemBytes([]byte("value of list")),
 	}
 	data := getSampleDataStorageHash()
 	e := NewStorageHash()
 	e.data = data
 
-	for _, v := range tests {
-		e.AddOrReplace(v)
-		for key, item := range data {
-			got := e.Get(key)
-			if got != item {
-				t.Errorf("Get(%q): got %p want %p (values: %q, %q)", key, got, item, got, item)
-			}
+	for key, item := range tests {
+		e.AddOrReplaceOne(key, item)
+		got := data[key]
+		if got != item {
+			t.Errorf("Get(%q): got %p want %p (values: %q, %q)", key, got, item, got, item)
 		}
 	}
 }
@@ -93,7 +91,7 @@ func TestStorageHash_Keys(t *testing.T) {
 	e := NewStorageHash()
 	e.data = data
 
-	want := []string{}
+	var want []string
 	for key := range data {
 		want = append(want, key)
 	}
@@ -198,7 +196,7 @@ func TestStorageHash_concurrency(t *testing.T) {
 
 	wg.Wait()
 
-	// Due to last operation of every StorageHashWorker is AddOrReplace() for last keyset
+	// Due to last operation of every StorageHashWorker is AddOrReplaceOne() for last keyset
 	// after all workers done, only last keyset  should remain in the storage
 	got := e.Keys()
 	want := tests[len(tests)-1]
@@ -218,35 +216,37 @@ func StorageHashWorker(wg *sync.WaitGroup, e *StorageHash, tests [][]string) {
 			e.Get(key)
 		}
 
-		e.AddOrReplace(items)
+		for key, item := range items {
+			e.AddOrReplaceOne(key, item)
+		}
 		e.GetSubmap(v[1:3])
 		e.Keys()
 		e.DelSubmap(map[string]*Item{"404": nil, v[0]: items[v[0]], v[1]: items[v[1]]})
 		e.Del(v)
 	}
-	e.AddOrReplace(items)
+	for key, item := range items {
+		e.AddOrReplaceOne(key, item)
+	}
 
 	wg.Done()
 }
 
 func GetFilledStorageHash(n int) *StorageHash {
-	items := make(map[string]*Item, n)
-
+	s := NewStorageHash()
 	for i := 0; i < n; i++ {
 		key := fmt.Sprintf("key:%d", i)
 		data := []byte(fmt.Sprintf("XXX"))
+		var item *Item
 		switch i % 3 {
 		case 0:
-			items[key] = NewItemBytes(data)
+			item = NewItemBytes(data)
 		case 1:
-			items[key] = NewItemList([][]byte{data})
+			item = NewItemList([][]byte{data})
 		case 2:
-			items[key] = NewItemDict(map[string][]byte{key: data})
+			item = NewItemDict(map[string][]byte{key: data})
 		}
+		s.AddOrReplaceOne(key, item)
 	}
-
-	s := NewStorageHash()
-	s.AddOrReplace(items)
 
 	return s
 }
