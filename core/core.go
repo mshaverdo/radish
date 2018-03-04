@@ -148,15 +148,17 @@ func (c *Core) Get(key string) (result []byte, err error) {
 	}
 
 	item.RLock()
-	defer item.RUnlock()
+	// !IMPORTANT! defer will cause too much overhead. double-check Unlock before EVERY return
 
 	if item.kind != Bytes {
+		item.RUnlock()
 		return nil, ErrWrongType
 	}
 
 	bytes := item.Bytes()
 	result = make([]byte, len(bytes))
 	copy(result, bytes)
+	item.RUnlock()
 
 	return result, nil
 }
@@ -216,9 +218,10 @@ func (c *Core) DSet(key, field string, value []byte) (count int, err error) {
 	}
 
 	item.Lock()
-	defer item.Unlock()
+	// !IMPORTANT! defer will cause too much overhead. double-check Unlock before EVERY return
 
 	if item.kind != Dict {
+		item.Unlock()
 		return 0, ErrWrongType
 	}
 
@@ -229,6 +232,7 @@ func (c *Core) DSet(key, field string, value []byte) (count int, err error) {
 	}
 	dict[field] = value
 
+	item.Unlock()
 	return count, nil
 }
 
@@ -241,21 +245,24 @@ func (c *Core) DGet(key, field string) (result []byte, err error) {
 	}
 
 	item.RLock()
-	defer item.RUnlock()
+	// !IMPORTANT! defer will cause too much overhead. double-check Unlock before EVERY return
 
 	if item.kind != Dict {
+		item.RUnlock()
 		return nil, ErrWrongType
 	}
 
 	dict := item.Dict()
 	value, ok := dict[field]
 	if !ok {
+		item.RUnlock()
 		return nil, ErrNotFound
 	}
 
 	result = make([]byte, len(value))
 	copy(result, value)
 
+	item.RUnlock()
 	return result, nil
 }
 
@@ -270,9 +277,10 @@ func (c *Core) DKeys(key string) (result []string, err error) {
 	}
 
 	item.RLock()
-	defer item.RUnlock()
+	// !IMPORTANT! defer will cause too much overhead. double-check Unlock before EVERY return
 
 	if item.kind != Dict {
+		item.RUnlock()
 		return nil, ErrWrongType
 	}
 
@@ -286,6 +294,7 @@ func (c *Core) DKeys(key string) (result []string, err error) {
 		}
 	}
 
+	item.RUnlock()
 	return filteredKeys, nil
 }
 
@@ -301,9 +310,10 @@ func (c *Core) DGetAll(key string) (result [][]byte, err error) {
 	}
 
 	item.RLock()
-	defer item.RUnlock()
+	// !IMPORTANT! defer will cause too much overhead. double-check Unlock before EVERY return
 
 	if item.kind != Dict {
+		item.RUnlock()
 		return nil, ErrWrongType
 	}
 
@@ -316,6 +326,7 @@ func (c *Core) DGetAll(key string) (result [][]byte, err error) {
 		result = append(result, keyBytes, value)
 	}
 
+	item.RUnlock()
 	return result, nil
 }
 
@@ -331,9 +342,10 @@ func (c *Core) DDel(key string, fields []string) (count int, err error) {
 	}
 
 	item.Lock()
-	defer item.Unlock()
+	// !IMPORTANT! defer will cause too much overhead. double-check Unlock before EVERY return
 
 	if item.kind != Dict {
+		item.Unlock()
 		return 0, ErrWrongType
 	}
 
@@ -345,6 +357,7 @@ func (c *Core) DDel(key string, fields []string) (count int, err error) {
 		}
 	}
 
+	item.Unlock()
 	return count, nil
 }
 
@@ -360,13 +373,16 @@ func (c *Core) LLen(key string) (count int, err error) {
 	}
 
 	item.RLock()
-	defer item.RUnlock()
+	// !IMPORTANT! defer will cause too much overhead. double-check Unlock before EVERY return
 
 	if item.kind != List {
+		item.RUnlock()
 		return 0, ErrWrongType
 	}
 
-	return len(item.List()), nil
+	count = len(item.List())
+	item.RUnlock()
+	return count, nil
 }
 
 // LRange returns the specified elements of the list stored at key.
@@ -382,9 +398,10 @@ func (c *Core) LRange(key string, start, stop int) (result [][]byte, err error) 
 	}
 
 	item.RLock()
-	defer item.RUnlock()
+	// !IMPORTANT! defer will cause too much overhead. double-check Unlock before EVERY return
 
 	if item.kind != List {
+		item.RUnlock()
 		return nil, ErrWrongType
 	}
 
@@ -393,6 +410,7 @@ func (c *Core) LRange(key string, start, stop int) (result [][]byte, err error) 
 
 	// just return on empty list to avoid further index checks
 	if lLen == 0 {
+		item.RUnlock()
 		return [][]byte{}, nil
 	}
 
@@ -408,6 +426,7 @@ func (c *Core) LRange(key string, start, stop int) (result [][]byte, err error) 
 
 	// after normalizing, next check  also covers start > len(), stop < 0
 	if start > stop {
+		item.RUnlock()
 		return [][]byte{}, nil
 	}
 
@@ -419,6 +438,7 @@ func (c *Core) LRange(key string, start, stop int) (result [][]byte, err error) 
 	slice := list[startIndex:stopIndex]
 	// just return on empty list to avoid further index checks
 	if len(slice) == 0 {
+		item.RUnlock()
 		return [][]byte{}, nil
 	}
 
@@ -431,6 +451,7 @@ func (c *Core) LRange(key string, start, stop int) (result [][]byte, err error) 
 		copy(result[resultI], v)
 	}
 
+	item.RUnlock()
 	return result, nil
 }
 
@@ -447,9 +468,10 @@ func (c *Core) LIndex(key string, index int) (result []byte, err error) {
 	}
 
 	item.RLock()
-	defer item.RUnlock()
+	// !IMPORTANT! defer will cause too much overhead. double-check Unlock before EVERY return
 
 	if item.kind != List {
+		item.RUnlock()
 		return nil, ErrWrongType
 	}
 
@@ -462,6 +484,7 @@ func (c *Core) LIndex(key string, index int) (result []byte, err error) {
 
 	// it also covers LLen == 0
 	if !(0 <= index && index <= lLen-1) {
+		item.RUnlock()
 		return []byte{}, ErrNotFound
 	}
 
@@ -473,6 +496,7 @@ func (c *Core) LIndex(key string, index int) (result []byte, err error) {
 	result = make([]byte, len(value))
 	copy(result, value)
 
+	item.RUnlock()
 	return result, nil
 }
 
@@ -491,9 +515,10 @@ func (c *Core) LSet(key string, index int, value []byte) (err error) {
 	}
 
 	item.Lock()
-	defer item.Unlock()
+	// !IMPORTANT! defer will cause too much overhead. double-check Unlock before EVERY return
 
 	if item.kind != List {
+		item.Unlock()
 		return ErrWrongType
 	}
 
@@ -506,6 +531,7 @@ func (c *Core) LSet(key string, index int, value []byte) (err error) {
 
 	// index out of range
 	if !(0 <= index && index <= lLen-1) {
+		item.Unlock()
 		return ErrInvalidIndex
 	}
 
@@ -514,6 +540,7 @@ func (c *Core) LSet(key string, index int, value []byte) (err error) {
 
 	list[sliceIndex] = value
 
+	item.Unlock()
 	return nil
 }
 
@@ -535,9 +562,10 @@ func (c *Core) LPush(key string, values [][]byte) (count int, err error) {
 	}
 
 	item.Lock()
-	defer item.Unlock()
+	// !IMPORTANT! defer will cause too much overhead. double-check Unlock before EVERY return
 
 	if item.kind != List {
+		item.Unlock()
 		return 0, ErrWrongType
 	}
 
@@ -546,7 +574,9 @@ func (c *Core) LPush(key string, values [][]byte) (count int, err error) {
 	list = append(list, values...)
 	item.SetList(list)
 
-	return len(list), nil
+	count = len(list)
+	item.Unlock()
+	return count, nil
 }
 
 // LPop Removes and returns the first element of the list stored at key.
@@ -559,15 +589,17 @@ func (c *Core) LPop(key string) (result []byte, err error) {
 	}
 
 	item.Lock()
-	defer item.Unlock()
+	// !IMPORTANT! defer will cause too much overhead. double-check Unlock before EVERY return
 
 	if item.kind != List {
+		item.Unlock()
 		return nil, ErrWrongType
 	}
 
 	list := item.List()
 
 	if len(list) == 0 {
+		item.Unlock()
 		return nil, ErrNotFound
 	}
 
@@ -576,6 +608,7 @@ func (c *Core) LPop(key string) (result []byte, err error) {
 	list = list[:len(list)-1]
 	item.SetList(list)
 
+	item.Unlock()
 	return result, nil
 }
 
@@ -590,13 +623,16 @@ func (c *Core) Ttl(key string) (ttl int, err error) {
 	}
 
 	item.RLock()
-	defer item.RUnlock()
+	// !IMPORTANT! defer will cause too much overhead. double-check Unlock before EVERY return
 
 	if !item.HasTtl() {
+		item.RUnlock()
 		return -1, nil
 	}
 
-	return item.Ttl(), nil
+	ttl = item.Ttl()
+	item.RUnlock()
+	return ttl, nil
 }
 
 // Expire sets a timeout on key. After the timeout has expired, the key will automatically be deleted.
@@ -616,16 +652,18 @@ func (c *Core) Expire(key string, seconds int) (result int) {
 	}
 
 	item.Lock()
-	defer item.Unlock()
+	// !IMPORTANT! defer will cause too much overhead. double-check Unlock before EVERY return
 
 	// check IsExpired() one more time inside the critical section, to avoid updating TTL
 	// for item, that already prepared to removal by CollectExpired()
 	if item.IsExpired() {
+		item.Unlock()
 		return 0
 	}
 
 	item.SetTtl(seconds)
 
+	item.Unlock()
 	return 1
 }
 
@@ -639,20 +677,23 @@ func (c *Core) Persist(key string) (result int) {
 	}
 
 	item.Lock()
-	defer item.Unlock()
+	// !IMPORTANT! defer will cause too much overhead. double-check Unlock before EVERY return
 
 	// check IsExpired() one more time inside the critical section, to avoid updating TTL
 	// for item, that already prepared to removal by CollectExpired()
 	if item.IsExpired() {
+		item.Unlock()
 		return 0
 	}
 
 	if !item.HasTtl() {
+		item.Unlock()
 		return 0
 	}
 
 	item.RemoveTtl()
 
+	item.Unlock()
 	return 1
 }
 
