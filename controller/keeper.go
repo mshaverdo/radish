@@ -130,16 +130,19 @@ func (k *Keeper) runWalController() {
 //TODO: test on full disc
 func (k *Keeper) writeToWalWorker(request *message.Request) (err error) {
 	k.mutex.Lock()
-	defer k.mutex.Unlock()
 
 	k.messageId++
 	request.Id = k.messageId
 	err = k.walEncoder.Encode(request)
 	if err != nil {
+		k.mutex.Unlock()
 		return fmt.Errorf("Keeper.writeToWalWorker(): %s", err)
 	}
 
-	return k.flushBuffers(!request.Unreliable)
+	err = k.flushBuffers(!request.Unreliable)
+
+	k.mutex.Unlock()
+	return err
 }
 
 // flushBuffers MUST be invoked only while k.mutex locked!

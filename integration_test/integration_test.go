@@ -160,7 +160,6 @@ func TestMain(m *testing.M) {
 		radishHttpPort int
 		radishRespPort int
 	)
-	//TODO: во всех get-командах проверить, чтобы TypeMismathc, notfound-значения возвращались ТОЧНО ТАК ЖЕ КАК В ЭТАЛОНЕ
 
 	//TODO: добавить описания ключей и способ запуска интеграционного теста в README
 	//go test -tags integration -v -redis localhost:6379 -flush github.com/mshaverdo/radish/integration_test

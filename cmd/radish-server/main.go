@@ -22,19 +22,13 @@ func init() {
 //TODO: in tests rename v -> tst
 //TODO: добавить описание опции -http в README. Написать, что основной режим -- RESP, дополнительный HTTP
 //TODO: в build.sh добавить пункт full-test c tag integration !!! и с флагом -race для полного тестирования
-//TODO: оптимизировать перфоманс
 //TODO: перейти на go 1.10
-//TODO: !!!! при включенном WAL оно работает на GET на 20% быстрее!!! и SET тоже. Самое быстрое: persis включен, synPolicy 0
-//TODO: погонять ПОЛНЫЙ набор бенчмаркков (LPUSH, HSET)
-//TODO: посмотреть, как у редиса реализован TTL, почитать.
 //TODO: REST в HTTP API
 //TODO: пройтись по возвращаемым ошибкам и подобавлять вызывающую функу для тексовых ошибок
 //TODO: написать в readme, что не поддерживается команда SET key val EX ttl, вместо нее надо использоавть SETEX -- поэтому в go-redis SET с указанием TTL работать не будет
 //TODO: написать вижн по реализации шардинга
 //TODO: возможно сделать экспериментальны форк
 //TODO: !!!!!! deep.equal не работает!!!! он не может сравнить Item -- потому что сравнивает только экспортированные поля
-//TODO: посмотреть, кто жрет столько оперативы при 10М записей 4+ гига
-//TODO: на миллионе ключей очень скачет производительность
 //TODO: написать в README, как запускать redis-benchmark. И что запускать его надо с Pipeline режимом
 //TODO: добавить в readme, что, очеыидно, для лучшей производительности можно запускать с GOGC=500. !!! привести примеры бенчмарка на GC=500
 func main() {
@@ -63,11 +57,9 @@ func main() {
 	flag.Parse()
 
 	//TODO: disable in production
-	//TODO: разобраться, почему с включенным профилем обрабатывается на 10% больше RPS
-	//TODO: написать в readme, что поддерживает pipeline, написать как запустить бенчмарк
 	if cpuProfile != "" {
-		if f, err := os.Create(cpuProfile); err == nil {
-			pprof.StartCPUProfile(f)
+		if fCpu, err := os.Create(cpuProfile); err == nil {
+			pprof.StartCPUProfile(fCpu)
 			defer pprof.StopCPUProfile()
 		} else {
 			log.Errorf("Can't create file %s: %s", cpuProfile, err)

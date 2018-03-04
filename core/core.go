@@ -6,7 +6,6 @@ import (
 	"math"
 )
 
-//TODO: if Storage.Lock() will be a bottleneck, try to use sharding by storages
 // configuration
 var (
 	// CollectExpiredBatchSize items processed by CollectExpired()  at once, in single mutex lock to reduce mutex lock overhead
@@ -44,7 +43,6 @@ type Storage interface {
 	DelSubmap(submap map[string]*Item) (count int)
 
 	// Keys returns all keys existing in the
-	//TODO: check performance in Keys() & CollectExpired(): maybe, it's better to return map[string]*Item to avoid extra Get() in those methods
 	Keys() (keys []string)
 }
 
@@ -62,7 +60,6 @@ func New(storage Storage) *Core {
 
 // CollectExpired checks all keys from storage and removes items with expired TTL and return count of actually removed items
 func (c *Core) CollectExpired() (count int) {
-	//TODO: check performance, it could freeze writing operations for a long time!
 	allKeys := c.storage.Keys()
 
 	expiredItems := map[string]*Item{}

@@ -8,6 +8,8 @@ import (
 	"sync"
 )
 
+//TODO: splitting StorageHash.mu & StorageHash.data to buckets with github.com/OneOfOne/xxhash as key hash will give about +20% rps in 1M keyspace
+
 //For in-memory storage (not on disc) hashmap should be faster thar b-tree
 type StorageHash struct {
 	mu sync.RWMutex

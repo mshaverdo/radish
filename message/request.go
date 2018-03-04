@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-//TODO: change Request to an interface for uniformity with Response
-
 // Type Request defined via gencode: request.schema &  request.schema.gen.go using github.com/andyleap/gencode
 //go:generate gencode go -schema request.schema -package message
 
