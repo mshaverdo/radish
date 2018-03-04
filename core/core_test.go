@@ -110,13 +110,13 @@ func TestCore_Keys(t *testing.T) {
 
 	c := New(NewMockStorage())
 
-	for _, v := range tests {
-		got := c.Keys(v.pattern)
+	for _, tst := range tests {
+		got := c.Keys(tst.pattern)
 		sort.Strings(got)
-		sort.Strings(v.want)
+		sort.Strings(tst.want)
 
-		if diff := deep.Equal(got, v.want); diff != nil {
-			t.Errorf("Keys(%q): %s\n\ngot:%v\n\nwant:%v", v.pattern, diff, got, v.want)
+		if diff := deep.Equal(got, tst.want); diff != nil {
+			t.Errorf("Keys(%q): %s\n\ngot:%v\n\nwant:%v", tst.pattern, diff, got, tst.want)
 		}
 	}
 }
@@ -136,13 +136,13 @@ func TestCore_Get(t *testing.T) {
 
 	c := New(NewMockStorage())
 
-	for _, v := range tests {
-		got, err := c.Get(v.key)
-		if err != v.err {
-			t.Errorf("Get(%q) err: %q != %q", v.key, err, v.err)
+	for _, tst := range tests {
+		got, err := c.Get(tst.key)
+		if err != tst.err {
+			t.Errorf("Get(%q) err: %q != %q", tst.key, err, tst.err)
 		}
-		if string(got) != v.want {
-			t.Errorf("Get(%q) err: %q != %q", v.key, string(got), v.want)
+		if string(got) != tst.want {
+			t.Errorf("Get(%q) err: %q != %q", tst.key, string(got), tst.want)
 		}
 	}
 }
@@ -159,14 +159,14 @@ func TestCore_Set(t *testing.T) {
 
 	c := New(NewMockStorage())
 
-	for _, v := range tests {
-		c.Set(v.key, []byte(v.value))
-		got, err := c.Get(v.key)
+	for _, tst := range tests {
+		c.Set(tst.key, []byte(tst.value))
+		got, err := c.Get(tst.key)
 		if err != nil {
-			t.Errorf("Set(%q) err: %q != nil", v.key, err)
+			t.Errorf("Set(%q) err: %q != nil", tst.key, err)
 		}
-		if string(got) != v.value {
-			t.Errorf("Set(%q) got: %q != %q", v.key, string(got), v.value)
+		if string(got) != tst.value {
+			t.Errorf("Set(%q) got: %q != %q", tst.key, string(got), tst.value)
 		}
 	}
 }
@@ -182,14 +182,14 @@ func TestCore_Del(t *testing.T) {
 
 	c := New(NewMockStorage())
 
-	for _, v := range tests {
-		c.Del(v.keys)
+	for _, tst := range tests {
+		c.Del(tst.keys)
 		got := c.Keys("*")
 		sort.Strings(got)
-		sort.Strings(v.want)
+		sort.Strings(tst.want)
 
-		if diff := deep.Equal(got, v.want); diff != nil {
-			t.Errorf("Del(%v): %s\n\ngot:%v\n\nwant:%v", v.keys, diff, got, v.want)
+		if diff := deep.Equal(got, tst.want); diff != nil {
+			t.Errorf("Del(%v): %s\n\ngot:%v\n\nwant:%v", tst.keys, diff, got, tst.want)
 		}
 	}
 }
@@ -210,13 +210,13 @@ func TestCore_DGet(t *testing.T) {
 
 	c := New(NewMockStorage())
 
-	for _, v := range tests {
-		got, err := c.DGet(v.key, v.field)
-		if err != v.err {
-			t.Errorf("DGet(%q, %q) err: %q != %q", v.key, v.field, err, v.err)
+	for _, tst := range tests {
+		got, err := c.DGet(tst.key, tst.field)
+		if err != tst.err {
+			t.Errorf("DGet(%q, %q) err: %q != %q", tst.key, tst.field, err, tst.err)
 		}
-		if string(got) != v.want {
-			t.Errorf("DGet(%q, %q) got: %q != %q", v.key, v.field, string(got), v.want)
+		if string(got) != tst.want {
+			t.Errorf("DGet(%q, %q) got: %q != %q", tst.key, tst.field, string(got), tst.want)
 		}
 	}
 }
@@ -235,16 +235,16 @@ func TestCore_DKeys(t *testing.T) {
 
 	c := New(NewMockStorage())
 
-	for _, v := range tests {
-		got, err := c.DKeys(v.key)
+	for _, tst := range tests {
+		got, err := c.DKeys(tst.key)
 		sort.Strings(got)
-		sort.Strings(v.want)
+		sort.Strings(tst.want)
 
-		if err != v.err {
-			t.Errorf("DKeys(%q) err: %q != %q", v.key, err, v.err)
+		if err != tst.err {
+			t.Errorf("DKeys(%q) err: %q != %q", tst.key, err, tst.err)
 		}
-		if diff := deep.Equal(got, v.want); diff != nil {
-			t.Errorf("DKeys(%q): %s\n\ngot:%v\n\nwant:%v", v.key, diff, got, v.want)
+		if diff := deep.Equal(got, tst.want); diff != nil {
+			t.Errorf("DKeys(%q): %s\n\ngot:%v\n\nwant:%v", tst.key, diff, got, tst.want)
 		}
 	}
 }
@@ -264,20 +264,20 @@ func TestCore_DSet(t *testing.T) {
 
 	c := New(NewMockStorage())
 
-	for _, v := range tests {
-		count, err := c.DSet(v.key, v.field, []byte(v.value))
-		got, getErr := c.DGet(v.key, v.field)
-		if err != v.err {
-			t.Errorf("DSet(%q, %q) err: %q != %q", v.key, v.field, err, v.err)
+	for _, tst := range tests {
+		count, err := c.DSet(tst.key, tst.field, []byte(tst.value))
+		got, getErr := c.DGet(tst.key, tst.field)
+		if err != tst.err {
+			t.Errorf("DSet(%q, %q) err: %q != %q", tst.key, tst.field, err, tst.err)
 		}
 		if err == nil && err != nil {
-			t.Errorf("DSet(%q, %q) getErr: %q ", v.key, v.field, getErr)
+			t.Errorf("DSet(%q, %q) getErr: %q ", tst.key, tst.field, getErr)
 		}
-		if err == nil && count != v.count {
-			t.Errorf("DSet(%q, %q) count: %d != %d", v.key, v.field, count, v.count)
+		if err == nil && count != tst.count {
+			t.Errorf("DSet(%q, %q) count: %d != %d", tst.key, tst.field, count, tst.count)
 		}
-		if err == nil && string(got) != v.value {
-			t.Errorf("DSet(%q, %q) got: %q != %q", v.key, v.field, string(got), v.value)
+		if err == nil && string(got) != tst.value {
+			t.Errorf("DSet(%q, %q) got: %q != %q", tst.key, tst.field, string(got), tst.value)
 		}
 	}
 }
@@ -296,10 +296,10 @@ func TestCore_DGetAll(t *testing.T) {
 
 	c := New(NewMockStorage())
 
-	for _, v := range tests {
-		result, err := c.DGetAll(v.key)
-		if err != v.err {
-			t.Errorf("DGet(%q) err: %q != %q", v.key, err, v.err)
+	for _, tst := range tests {
+		result, err := c.DGetAll(tst.key)
+		if err != tst.err {
+			t.Errorf("DGet(%q) err: %q != %q", tst.key, err, tst.err)
 		}
 		got := map[string]string{}
 		for i, v := range result {
@@ -309,8 +309,8 @@ func TestCore_DGetAll(t *testing.T) {
 			}
 			got[string(v)] = string(result[i+1])
 		}
-		if diff := deep.Equal(got, v.want); err == nil && diff != nil {
-			t.Errorf("DGetAll(%q): %s\n\ngot:%v\n\nwant:%v", v.key, diff, got, v.want)
+		if diff := deep.Equal(got, tst.want); err == nil && diff != nil {
+			t.Errorf("DGetAll(%q): %s\n\ngot:%v\n\nwant:%v", tst.key, diff, got, tst.want)
 		}
 	}
 }
@@ -331,20 +331,20 @@ func TestCore_DDel(t *testing.T) {
 
 	c := New(NewMockStorage())
 
-	for _, v := range tests {
-		count, err := c.DDel(v.key, v.fields)
-		got, _ := c.DKeys(v.key)
+	for _, tst := range tests {
+		count, err := c.DDel(tst.key, tst.fields)
+		got, _ := c.DKeys(tst.key)
 		sort.Strings(got)
-		sort.Strings(v.wantKeys)
+		sort.Strings(tst.wantKeys)
 
-		if err != v.err {
-			t.Errorf("DDel(%q, %q) err: %q != %q", v.key, v.fields, err, v.err)
+		if err != tst.err {
+			t.Errorf("DDel(%q, %q) err: %q != %q", tst.key, tst.fields, err, tst.err)
 		}
-		if count != v.wantCount {
-			t.Errorf("DDel(%q, %q) count: %d != %d", v.key, v.fields, count, v.wantCount)
+		if count != tst.wantCount {
+			t.Errorf("DDel(%q, %q) count: %d != %d", tst.key, tst.fields, count, tst.wantCount)
 		}
-		if diff := deep.Equal(got, v.wantKeys); diff != nil {
-			t.Errorf("DKeys(%q, %q): %s\n\ngot:%v\n\nwant:%v", v.key, v.fields, diff, got, v.wantKeys)
+		if diff := deep.Equal(got, tst.wantKeys); diff != nil {
+			t.Errorf("DKeys(%q, %q): %s\n\ngot:%v\n\nwant:%v", tst.key, tst.fields, diff, got, tst.wantKeys)
 		}
 	}
 }
@@ -363,14 +363,14 @@ func TestCore_LLen(t *testing.T) {
 
 	c := New(NewMockStorage())
 
-	for _, v := range tests {
-		got, err := c.LLen(v.key)
+	for _, tst := range tests {
+		got, err := c.LLen(tst.key)
 
-		if err != v.err {
-			t.Errorf("LLen(%q) err: %q != %q", v.key, err, v.err)
+		if err != tst.err {
+			t.Errorf("LLen(%q) err: %q != %q", tst.key, err, tst.err)
 		}
-		if got != v.want {
-			t.Errorf("LLen(%q) count: %d != %d", v.key, got, v.want)
+		if got != tst.want {
+			t.Errorf("LLen(%q) count: %d != %d", tst.key, got, tst.want)
 		}
 	}
 }
@@ -401,18 +401,18 @@ func TestCore_LRange(t *testing.T) {
 
 	c := New(NewMockStorage())
 
-	for _, v := range tests {
-		result, err := c.LRange(v.key, v.start, v.stop)
+	for _, tst := range tests {
+		result, err := c.LRange(tst.key, tst.start, tst.stop)
 		got := make([]string, len(result))
 		for i, b := range result {
 			got[i] = string(b)
 		}
 
-		if err != v.err {
-			t.Errorf("LRange(%q, %d, %d) err: %q != %q", v.key, v.start, v.stop, err, v.err)
+		if err != tst.err {
+			t.Errorf("LRange(%q, %d, %d) err: %q != %q", tst.key, tst.start, tst.stop, err, tst.err)
 		}
-		if diff := deep.Equal(got, v.want); diff != nil {
-			t.Errorf("LRange(%q, %d, %d): %s\n\ngot:%v\n\nwant:%v", v.key, v.start, v.stop, diff, got, v.want)
+		if diff := deep.Equal(got, tst.want); diff != nil {
+			t.Errorf("LRange(%q, %d, %d): %s\n\ngot:%v\n\nwant:%v", tst.key, tst.start, tst.stop, diff, got, tst.want)
 		}
 	}
 }
@@ -438,15 +438,15 @@ func TestCore_LIndex(t *testing.T) {
 
 	c := New(NewMockStorage())
 
-	for _, v := range tests {
-		result, err := c.LIndex(v.key, v.index)
+	for _, tst := range tests {
+		result, err := c.LIndex(tst.key, tst.index)
 		got := string(result)
 
-		if err != v.err {
-			t.Errorf("LIndex(%q, %d) err: %q != %q", v.key, v.index, err, v.err)
+		if err != tst.err {
+			t.Errorf("LIndex(%q, %d) err: %q != %q", tst.key, tst.index, err, tst.err)
 		}
-		if got != v.want {
-			t.Errorf("LIndex(%q, %d) got: %q != %q", v.key, v.index, got, v.want)
+		if got != tst.want {
+			t.Errorf("LIndex(%q, %d) got: %q != %q", tst.key, tst.index, got, tst.want)
 		}
 	}
 }
@@ -470,16 +470,16 @@ func TestCore_LSet(t *testing.T) {
 
 	c := New(NewMockStorage())
 
-	for _, v := range tests {
-		err := c.LSet(v.key, v.index, []byte(v.value))
-		result, _ := c.LIndex(v.key, v.index)
+	for _, tst := range tests {
+		err := c.LSet(tst.key, tst.index, []byte(tst.value))
+		result, _ := c.LIndex(tst.key, tst.index)
 		got := string(result)
 
-		if err != v.err {
-			t.Errorf("LSet(%q, %d, %q) err: %q != %q", v.key, v.index, v.value, err, v.err)
+		if err != tst.err {
+			t.Errorf("LSet(%q, %d, %q) err: %q != %q", tst.key, tst.index, tst.value, err, tst.err)
 		}
-		if err == nil && got != v.value {
-			t.Errorf("LSet(%q, %d, %q) got: %q != %q", v.key, v.index, v.value, got, v.value)
+		if err == nil && got != tst.value {
+			t.Errorf("LSet(%q, %d, %q) got: %q != %q", tst.key, tst.index, tst.value, got, tst.value)
 		}
 	}
 }
@@ -498,28 +498,28 @@ func TestCore_LPush(t *testing.T) {
 
 	c := New(NewMockStorage())
 
-	for _, v := range tests {
-		values := make([][]byte, len(v.values))
-		for i, value := range v.values {
+	for _, tst := range tests {
+		values := make([][]byte, len(tst.values))
+		for i, value := range tst.values {
 			values[i] = []byte(value)
 		}
 
-		count, err := c.LPush(v.key, values)
-		result, _ := c.LRange(v.key, 0, -1)
+		count, err := c.LPush(tst.key, values)
+		result, _ := c.LRange(tst.key, 0, -1)
 
 		got := make([]string, len(result))
 		for i, value := range result {
 			got[i] = string(value)
 		}
 
-		if err != v.err {
-			t.Errorf("LPush(%q, %q) err: %q != %q", v.key, v.values, err, v.err)
+		if err != tst.err {
+			t.Errorf("LPush(%q, %q) err: %q != %q", tst.key, tst.values, err, tst.err)
 		}
-		if err == nil && count != len(v.want) {
-			t.Errorf("LPush(%q, %q) count: %d != %d", v.key, v.values, count, len(v.want))
+		if err == nil && count != len(tst.want) {
+			t.Errorf("LPush(%q, %q) count: %d != %d", tst.key, tst.values, count, len(tst.want))
 		}
-		if diff := deep.Equal(got, v.want); err == nil && diff != nil {
-			t.Errorf("LPush(%q, %q): %s\n\ngot:%v\n\nwant:%v", v.key, v.values, diff, got, v.want)
+		if diff := deep.Equal(got, tst.want); err == nil && diff != nil {
+			t.Errorf("LPush(%q, %q): %s\n\ngot:%v\n\nwant:%v", tst.key, tst.values, diff, got, tst.want)
 		}
 	}
 }
@@ -542,23 +542,23 @@ func TestCore_LPop(t *testing.T) {
 
 	c := New(NewMockStorage())
 
-	for _, v := range tests {
-		value, err := c.LPop(v.key)
-		result, _ := c.LRange(v.key, 0, -1)
+	for _, tst := range tests {
+		value, err := c.LPop(tst.key)
+		result, _ := c.LRange(tst.key, 0, -1)
 
 		got := make([]string, len(result))
 		for i, value := range result {
 			got[i] = string(value)
 		}
 
-		if err != v.err {
-			t.Errorf("LPop(%q) err: %q != %q", v.key, err, v.err)
+		if err != tst.err {
+			t.Errorf("LPop(%q) err: %q != %q", tst.key, err, tst.err)
 		}
-		if err == nil && string(value) != v.wantResult {
-			t.Errorf("LPop(%q) value: %q != %q", v.key, string(value), v.wantResult)
+		if err == nil && string(value) != tst.wantResult {
+			t.Errorf("LPop(%q) value: %q != %q", tst.key, string(value), tst.wantResult)
 		}
-		if diff := deep.Equal(got, v.wantList); err == nil && diff != nil {
-			t.Errorf("LPop(%q): %s\n\ngot:%v\n\nwant:%v", v.key, diff, got, v.wantList)
+		if diff := deep.Equal(got, tst.wantList); err == nil && diff != nil {
+			t.Errorf("LPop(%q): %s\n\ngot:%v\n\nwant:%v", tst.key, diff, got, tst.wantList)
 		}
 	}
 }
@@ -843,14 +843,14 @@ func TestCore_SetEx(t *testing.T) {
 	storage := NewMockStorage()
 	c := New(storage)
 
-	for _, v := range tests {
-		c.SetEx(v.key, v.ttl, []byte(v.value))
-		got, _ := c.Get(v.key)
-		if string(got) != v.wantValue {
-			t.Errorf("SetEx(%q) got: %q != %q", v.key, string(got), v.value)
+	for _, tst := range tests {
+		c.SetEx(tst.key, tst.ttl, []byte(tst.value))
+		got, _ := c.Get(tst.key)
+		if string(got) != tst.wantValue {
+			t.Errorf("SetEx(%q) got: %q != %q", tst.key, string(got), tst.value)
 		}
-		if got != nil && storage.data[v.key].Ttl() != v.ttl {
-			t.Errorf("SetEx(%q) ttl: %d != %d, %q", v.key, storage.data[v.key].Ttl(), v.ttl, storage.data[v.key])
+		if got != nil && storage.data[tst.key].Ttl() != tst.ttl {
+			t.Errorf("SetEx(%q) ttl: %d != %d, %q", tst.key, storage.data[tst.key].Ttl(), tst.ttl, storage.data[tst.key])
 		}
 	}
 }
@@ -868,13 +868,13 @@ func TestCore_Persist(t *testing.T) {
 	storage := NewMockStorage()
 	c := New(storage)
 
-	for _, v := range tests {
-		result := c.Persist(v.key)
-		if result != v.wantResult {
-			t.Errorf("Persist(%q) result: %q != %q", v.key, result, v.wantResult)
+	for _, tst := range tests {
+		result := c.Persist(tst.key)
+		if result != tst.wantResult {
+			t.Errorf("Persist(%q) result: %q != %q", tst.key, result, tst.wantResult)
 		}
-		if result == 1 && storage.data[v.key].HasTtl() {
-			t.Errorf("Persist(%q): item still volatile", v.key)
+		if result == 1 && storage.data[tst.key].HasTtl() {
+			t.Errorf("Persist(%q): item still volatile", tst.key)
 		}
 	}
 }
@@ -894,16 +894,16 @@ func TestCore_Expire(t *testing.T) {
 	storage := NewMockStorage()
 	c := New(storage)
 
-	for _, v := range tests {
-		result := c.Expire(v.key, v.ttl)
-		if result != v.wantResult {
-			t.Errorf("Expire(%q) result: %q != %q", v.key, result, v.wantResult)
+	for _, tst := range tests {
+		result := c.Expire(tst.key, tst.ttl)
+		if result != tst.wantResult {
+			t.Errorf("Expire(%q) result: %q != %q", tst.key, result, tst.wantResult)
 		}
-		if got, _ := c.Get(v.key); v.wantExists != (got != nil) {
-			t.Errorf("Expire(%q) existanse: %t != %t", v.key, got != nil, v.wantExists)
+		if got, _ := c.Get(tst.key); tst.wantExists != (got != nil) {
+			t.Errorf("Expire(%q) existanse: %t != %t", tst.key, got != nil, tst.wantExists)
 		}
-		if v.wantExists && storage.data[v.key].Ttl() != v.ttl {
-			t.Errorf("Expire(%q) ttl: %d != %d", v.key, storage.data[v.key].Ttl(), v.ttl)
+		if tst.wantExists && storage.data[tst.key].Ttl() != tst.ttl {
+			t.Errorf("Expire(%q) ttl: %d != %d", tst.key, storage.data[tst.key].Ttl(), tst.ttl)
 		}
 	}
 }
@@ -921,13 +921,13 @@ func TestCore_Ttl(t *testing.T) {
 
 	c := New(NewMockStorage())
 
-	for _, v := range tests {
-		ttl, err := c.Ttl(v.key)
-		if err != v.wantErr {
-			t.Errorf("Ttl(%q) err: %q != %q", v.key, err, v.wantErr)
+	for _, tst := range tests {
+		ttl, err := c.Ttl(tst.key)
+		if err != tst.wantErr {
+			t.Errorf("Ttl(%q) err: %q != %q", tst.key, err, tst.wantErr)
 		}
-		if ttl != v.wantTtl {
-			t.Errorf("Ttl(%q) ttl: %d != %d", v.key, ttl, v.wantTtl)
+		if ttl != tst.wantTtl {
+			t.Errorf("Ttl(%q) ttl: %d != %d", tst.key, ttl, tst.wantTtl)
 		}
 	}
 }

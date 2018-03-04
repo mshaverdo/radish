@@ -62,10 +62,10 @@ func TestStorageHash_GetSubmap(t *testing.T) {
 	e := NewStorageHash()
 	e.SetData(data)
 
-	for _, v := range tests {
-		got := e.GetSubmap(v.keys)
-		if !reflect.DeepEqual(got, v.want) {
-			t.Errorf("GetSubmap(%q): \ngot:%v\n\nwant:%v", v.keys, got, v.want)
+	for _, tst := range tests {
+		got := e.GetSubmap(tst.keys)
+		if !reflect.DeepEqual(got, tst.want) {
+			t.Errorf("GetSubmap(%q): \ngot:%v\n\nwant:%v", tst.keys, got, tst.want)
 		}
 	}
 }
@@ -118,14 +118,14 @@ func TestStorageHash_Del(t *testing.T) {
 	e := NewStorageHash()
 	e.SetData(data)
 
-	for _, v := range tests {
-		e.Del(v.keys)
+	for _, tst := range tests {
+		e.Del(tst.keys)
 		got := e.Keys()
 
 		sort.Strings(got)
-		sort.Strings(v.want)
-		if diff := deep.Equal(got, v.want); diff != nil {
-			t.Errorf("Del(): %s\n\ngot:%v\n\nwant:%v", diff, got, v.want)
+		sort.Strings(tst.want)
+		if diff := deep.Equal(got, tst.want); diff != nil {
+			t.Errorf("Del(): %s\n\ngot:%v\n\nwant:%v", diff, got, tst.want)
 		}
 	}
 }
@@ -153,19 +153,19 @@ func TestStorageHash_DelSubmap(t *testing.T) {
 	e := NewStorageHash()
 	e.SetData(data)
 
-	for _, v := range tests {
-		count := e.DelSubmap(v.submap)
+	for _, tst := range tests {
+		count := e.DelSubmap(tst.submap)
 		got := e.Keys()
 
 		sort.Strings(got)
-		sort.Strings(v.wantKeys)
+		sort.Strings(tst.wantKeys)
 
-		if count != v.wantCount {
-			t.Errorf("DelSubmap(%q) count: %d != %d", v.submap, count, v.wantCount)
+		if count != tst.wantCount {
+			t.Errorf("DelSubmap(%q) count: %d != %d", tst.submap, count, tst.wantCount)
 		}
 
-		if diff := deep.Equal(got, v.wantKeys); diff != nil {
-			t.Errorf("DelSubmap(%q): %s\n\ngot:%v\n\nwant:%v", v.submap, diff, got, v.wantKeys)
+		if diff := deep.Equal(got, tst.wantKeys); diff != nil {
+			t.Errorf("DelSubmap(%q): %s\n\ngot:%v\n\nwant:%v", tst.submap, diff, got, tst.wantKeys)
 		}
 	}
 }
@@ -210,9 +210,9 @@ func TestStorageHash_concurrency(t *testing.T) {
 
 func StorageHashWorker(wg *sync.WaitGroup, e *StorageHash, tests [][]string) {
 	var items map[string]*Item
-	for _, v := range tests {
+	for _, tst := range tests {
 		items = map[string]*Item{}
-		for _, key := range v {
+		for _, key := range tst {
 			items[key] = NewItemBytes([]byte(time.Now().String()))
 			e.Get(key)
 		}
@@ -220,10 +220,10 @@ func StorageHashWorker(wg *sync.WaitGroup, e *StorageHash, tests [][]string) {
 		for key, item := range items {
 			e.AddOrReplaceOne(key, item)
 		}
-		e.GetSubmap(v[1:3])
+		e.GetSubmap(tst[1:3])
 		e.Keys()
-		e.DelSubmap(map[string]*Item{"404": nil, v[0]: items[v[0]], v[1]: items[v[1]]})
-		e.Del(v)
+		e.DelSubmap(map[string]*Item{"404": nil, tst[0]: items[tst[0]], tst[1]: items[tst[1]]})
+		e.Del(tst)
 	}
 	for key, item := range items {
 		e.AddOrReplaceOne(key, item)

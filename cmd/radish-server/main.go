@@ -18,8 +18,6 @@ func init() {
 	assert.Enabled = (assertionEnabled == "1")
 }
 
-//TODO: сделать все тесты внешними pkgname_test
-//TODO: in tests rename v -> tst
 //TODO: добавить описание опции -http в README. Написать, что основной режим -- RESP, дополнительный HTTP
 //TODO: в build.sh добавить пункт full-test c tag integration !!! и с флагом -race для полного тестирования
 //TODO: перейти на go 1.10
