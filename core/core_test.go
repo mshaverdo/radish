@@ -1,8 +1,9 @@
-package core
+package core_test
 
 import (
 	"fmt"
 	"github.com/go-test/deep"
+	. "github.com/mshaverdo/radish/core"
 	"math/rand"
 	"sort"
 	"sync"
@@ -16,7 +17,8 @@ type MockStorage struct {
 
 func getSampleDataCore() map[string]*Item {
 	expiredItem := NewItemBytes([]byte("Expired"))
-	expiredItem.expireAt = time.Now().Add(-1)
+	expiredItem.SetMilliTtl(1)
+	time.Sleep(1 * time.Millisecond)
 
 	expireLaterItem := NewItemBytes([]byte("Призрак бродит по Европе - призрак коммунизма."))
 	expireLaterItem.SetTtl(1000)
@@ -725,7 +727,7 @@ func collectExpiredTestRunner(
 	expirationTimer := time.After(time.Duration(maxTtl) * time.Millisecond)
 
 	e := NewStorageHash()
-	e.data = data
+	e.SetData(data)
 	c := New(e)
 	stopCollector := make(chan struct{})
 	wg := sync.WaitGroup{}
@@ -759,7 +761,7 @@ func collectExpiredTestRunner(
 
 	// Check results
 	var actualKeys []string
-	for k, v := range e.data {
+	for k, v := range e.Data() {
 		if v.IsExpired() {
 			t.Errorf("Expired key in result DB: %q : %q", k, v)
 			continue

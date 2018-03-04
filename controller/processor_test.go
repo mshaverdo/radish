@@ -1,7 +1,8 @@
-package controller
+package controller_test
 
 import (
 	"fmt"
+	"github.com/mshaverdo/radish/controller"
 	"github.com/mshaverdo/radish/message"
 	"testing"
 	"time"
@@ -41,7 +42,7 @@ func TestProcessor_FixRequestTtl(t *testing.T) {
 	}
 
 	for _, tst := range tests {
-		p := NewProcessor(nil)
+		p := controller.NewProcessor(nil)
 		p.FixRequestTtl(tst.message)
 
 		got := fmt.Sprintf("%q", tst.message.Args)

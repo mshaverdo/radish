@@ -1,9 +1,10 @@
-package controller
+package controller_test
 
 import (
 	"bufio"
 	"encoding/binary"
 	"github.com/go-test/deep"
+	"github.com/mshaverdo/radish/controller"
 	"github.com/mshaverdo/radish/message"
 	"io"
 	"io/ioutil"
@@ -25,7 +26,7 @@ func BenchmarkGencodeEncoder_Encode(b *testing.B) {
 		os.Remove(name)
 	}()
 
-	encoder := NewGencodeEncoder(w)
+	encoder := controller.NewGencodeEncoder(w)
 	request := message.NewRequest("SET", [][]byte{[]byte("000000000001"), []byte("XXX")})
 
 	b.ResetTimer()
@@ -50,7 +51,7 @@ func BenchmarkGencodeEncoder_Decode(b *testing.B) {
 		os.Remove(name)
 	}()
 
-	encoder := NewGencodeEncoder(w)
+	encoder := controller.NewGencodeEncoder(w)
 	request := message.NewRequest("SET", [][]byte{[]byte("000000000001"), []byte("XXX")})
 
 	for i := 0; i < b.N; i++ {
@@ -60,7 +61,7 @@ func BenchmarkGencodeEncoder_Decode(b *testing.B) {
 	w.Flush()
 
 	file.Seek(0, 0)
-	decoder := NewGencodeDecoder(file)
+	decoder := controller.NewGencodeDecoder(file)
 
 	b.ResetTimer()
 	request = new(message.Request)
@@ -85,7 +86,7 @@ func TestGencodeEncoder_EncodeDecode(t *testing.T) {
 		os.Remove(name)
 	}()
 
-	encoder := NewGencodeEncoder(w)
+	encoder := controller.NewGencodeEncoder(w)
 	srcRequests := make([]*message.Request, 100)
 	for i := 0; i < len(srcRequests); i++ {
 		srcRequests[i] = message.NewRequest("SET", [][]byte{[]byte("000000000001"), []byte("XXX")})
@@ -97,7 +98,7 @@ func TestGencodeEncoder_EncodeDecode(t *testing.T) {
 	w.Flush()
 
 	file.Seek(0, 0)
-	decoder := NewGencodeDecoder(file)
+	decoder := controller.NewGencodeDecoder(file)
 
 	requests := make([]*message.Request, 0)
 	request := new(message.Request)

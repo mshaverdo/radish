@@ -1,10 +1,11 @@
-package core
+package core_test
 
 import (
 	"bufio"
 	"bytes"
 	"fmt"
 	"github.com/go-test/deep"
+	. "github.com/mshaverdo/radish/core"
 	"io/ioutil"
 	"math"
 	"math/rand"
@@ -35,7 +36,7 @@ func getSampleDataStorageHash() map[string]*Item {
 func TestStorageHash_Get(t *testing.T) {
 	data := getSampleDataStorageHash()
 	e := NewStorageHash()
-	e.data = data
+	e.SetData(data)
 
 	for key, item := range data {
 		got := e.Get(key)
@@ -59,7 +60,7 @@ func TestStorageHash_GetSubmap(t *testing.T) {
 	}
 
 	e := NewStorageHash()
-	e.data = data
+	e.SetData(data)
 
 	for _, v := range tests {
 		got := e.GetSubmap(v.keys)
@@ -75,7 +76,7 @@ func TestStorageHash_AddOrReplaceOne(t *testing.T) {
 	}
 	data := getSampleDataStorageHash()
 	e := NewStorageHash()
-	e.data = data
+	e.SetData(data)
 
 	for key, item := range tests {
 		e.AddOrReplaceOne(key, item)
@@ -89,7 +90,7 @@ func TestStorageHash_AddOrReplaceOne(t *testing.T) {
 func TestStorageHash_Keys(t *testing.T) {
 	data := getSampleDataStorageHash()
 	e := NewStorageHash()
-	e.data = data
+	e.SetData(data)
 
 	var want []string
 	for key := range data {
@@ -115,7 +116,7 @@ func TestStorageHash_Del(t *testing.T) {
 
 	data := getSampleDataStorageHash()
 	e := NewStorageHash()
-	e.data = data
+	e.SetData(data)
 
 	for _, v := range tests {
 		e.Del(v.keys)
@@ -150,7 +151,7 @@ func TestStorageHash_DelSubmap(t *testing.T) {
 	}
 
 	e := NewStorageHash()
-	e.data = data
+	e.SetData(data)
 
 	for _, v := range tests {
 		count := e.DelSubmap(v.submap)
@@ -253,7 +254,7 @@ func GetFilledStorageHash(n int) *StorageHash {
 
 func TestStorageHash_PersistLoad(t *testing.T) {
 	persisting := NewStorageHash()
-	persisting.data = getSampleDataStorageHash()
+	persisting.SetData(getSampleDataStorageHash())
 	buf := bytes.NewBuffer(nil)
 
 	err := persisting.Persist(buf, math.MaxInt64)
@@ -272,8 +273,8 @@ func TestStorageHash_PersistLoad(t *testing.T) {
 		t.Errorf("Invalid messageId: %d != %d", messageId, math.MaxInt64)
 	}
 
-	if !reflect.DeepEqual(loading.data, persisting.data) {
-		t.Errorf("Persist/Load data mismatch: \ngot:%q\n\nwant:%q", loading.data, persisting.data)
+	if !reflect.DeepEqual(loading.Data(), persisting.Data()) {
+		t.Errorf("Persist/Load data mismatch: \ngot:%q\n\nwant:%q", loading.Data(), persisting.Data())
 	}
 }
 
