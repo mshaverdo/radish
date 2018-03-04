@@ -12,6 +12,8 @@ import (
 // Type Request defined via gencode: request.schema &  request.schema.gen.go using github.com/andyleap/gencode
 //go:generate gencode go -schema request.schema -package message
 
+// Unfortunately, sync.Pool in Request/Response constructors gives only about 5% perf boost, but significantly increase code complexity
+
 // NewRequest constructs new Request object
 func NewRequest(cmd string, args [][]byte) *Request {
 	return &Request{Timestamp: time.Now().Unix(), Cmd: cmd, Args: args}

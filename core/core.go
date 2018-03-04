@@ -104,6 +104,11 @@ func (c *Core) CollectExpired() (count int) {
 							It used to fix TTL-argument during restore from WAL
 */
 
+// About performance:
+// It is possible to add another 10-20% RPS, but it requires removing deferred calls.
+// This performance boost is impressive, but makes code too hard to maintain, so i had left this feature as experiment
+// in `remove_core_defer` branch. You could apply this changes carefully if performance is REALLY necessary
+
 // Keys returns all keys matching glob pattern
 // Warning: consider KEYS as a command that should only be used in production environments with extreme care.
 // It may ruin performance when it is executed against large databases.
