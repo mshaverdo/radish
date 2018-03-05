@@ -80,7 +80,7 @@ func TestStorageHash_AddOrReplaceOne(t *testing.T) {
 
 	for key, item := range tests {
 		e.AddOrReplaceOne(key, item)
-		got := data[key]
+		got := e.Get(key)
 		if got != item {
 			t.Errorf("Get(%q): got %p want %p (values: %q, %q)", key, got, item, got, item)
 		}

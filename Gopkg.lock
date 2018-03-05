@@ -2,6 +2,13 @@
 
 
 [[projects]]
+  name = "github.com/OneOfOne/xxhash"
+  packages = ["."]
+  revision = "4e9e81466dc37c9fd94ce9ecf42020ef54112203"
+  version = "v1.2.1"
+
+[[projects]]
+  branch = "master"
   name = "github.com/go-redis/redis"
   packages = [
     ".",
@@ -9,10 +16,11 @@
     "internal/consistenthash",
     "internal/hashtag",
     "internal/pool",
-    "internal/proto"
+    "internal/proto",
+    "internal/singleflight",
+    "internal/util"
   ]
-  revision = "8b4fa6d443e35ca8b1c37be877285252430b06a3"
-  version = "v6.8.3"
+  revision = "7acec74c599074e0a8e21e1b6aeb6ee80f442ab4"
 
 [[projects]]
   name = "github.com/go-test/deep"
@@ -47,6 +55,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "f1c21eaa1132f11d6b7a669e15191095c3ad13cc0d5ffde1202986947e108ee8"
+  inputs-digest = "0bdeb3071fbb749736c2c8b93fbd85601652f606b09b27345c4ee7d92abd5dcf"
   solver-name = "gps-cdcl"
   solver-version = 1

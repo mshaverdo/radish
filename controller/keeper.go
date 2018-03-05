@@ -484,7 +484,7 @@ func (k *Keeper) updateSnapshot() error {
 	assert.True(len(allWals) != len(processingWals), "new WAL must be in datadir: "+k.dataDir+" "+newWal)
 
 	snapshotKeeper := NewKeeper(
-		core.New(nil),
+		core.New(k.storageFactory()),
 		k.dataDir,
 		SyncNever,
 		0,

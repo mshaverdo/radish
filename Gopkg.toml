@@ -48,3 +48,11 @@
 [[constraint]]
   branch = "master"
   name = "github.com/tidwall/redcon"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/OneOfOne/xxhash"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/go-redis/redis"

@@ -4,78 +4,121 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"github.com/OneOfOne/xxhash"
 	"io"
 	"sync"
 )
 
-//TODO: splitting StorageHash.mu & StorageHash.data to buckets with github.com/OneOfOne/xxhash as key hash will give about +20% rps in 1M keyspace
+const (
+	bucketsCount = 1024
+)
 
 //For in-memory storage (not on disc) hashmap should be faster thar b-tree
+// hashmap sharding gives significant performance boost on wide keyspace
+// (up to 10x SET on 1M keys & 1k concurrent connects at octa-core cpu)
 type StorageHash struct {
-	mu sync.RWMutex
+	mu [bucketsCount]sync.RWMutex
 
-	data map[string]*Item
+	data [bucketsCount]map[string]*Item
 }
 
 // NewStorageHash constructs new  StorageHash instance
 func NewStorageHash() *StorageHash {
-	return &StorageHash{data: make(map[string]*Item)}
+	s := &StorageHash{}
+	for i := range s.data {
+		s.data[i] = make(map[string]*Item)
+	}
+	return s
 }
 
 // Get returns reference to Item by key. If Item not exists, return nil
 func (e *StorageHash) Get(key string) (item *Item) {
-	e.mu.RLock()
-	item = e.data[key]
-	e.mu.RUnlock()
+	b := getBucket(key)
+	e.mu[b].RLock()
+	item = e.data[b][key]
+	e.mu[b].RUnlock()
 	return item
 }
 
 // Get returns *Items mapped to provided keys.
 func (e *StorageHash) GetSubmap(keys []string) (submap map[string]*Item) {
-	submap = make(map[string]*Item, len(keys))
-
-	e.mu.RLock()
+	var keysByBucket [bucketsCount][]string
 	for _, key := range keys {
-		if item, ok := e.data[key]; ok {
-			submap[key] = item
-		}
+		b := getBucket(key)
+		keysByBucket[b] = append(keysByBucket[b], key)
 	}
-	e.mu.RUnlock()
+
+	submap = make(map[string]*Item, len(keys))
+	for b, bucketKeys := range keysByBucket {
+		if len(bucketKeys) == 0 {
+			continue
+		}
+
+		e.mu[b].RLock()
+		for _, key := range bucketKeys {
+			if item, ok := e.data[b][key]; ok {
+				submap[key] = item
+			}
+		}
+		e.mu[b].RUnlock()
+	}
 
 	return submap
 }
 
 // Keys returns all keys existing in the Storage
 func (e *StorageHash) Keys() (keys []string) {
-	e.mu.RLock()
-	keys = make([]string, 0, len(e.data))
-	for k := range e.data {
-		keys = append(keys, k)
+	totalLen := 0
+	for b := range e.data {
+		e.mu[b].RLock()
+		totalLen += len(e.data[b])
+		e.mu[b].RUnlock()
 	}
-	e.mu.RUnlock()
+
+	//add 1% to avoid whole keys slice reallocation when couple of items added
+	keys = make([]string, 0, totalLen+totalLen/100)
+	for b := range e.data {
+		e.mu[b].RLock()
+		for k := range e.data[b] {
+			keys = append(keys, k)
+		}
+		e.mu[b].RUnlock()
+	}
 
 	return keys
 }
 
 // AddOrReplaceOne adds new or replaces one existing Item in the storage. It much faster than AddOrReplace with single items
 func (e *StorageHash) AddOrReplaceOne(key string, item *Item) {
-	e.mu.Lock()
-	e.data[key] = item
-	e.mu.Unlock()
+	b := getBucket(key)
+	e.mu[b].Lock()
+	e.data[b][key] = item
+	e.mu[b].Unlock()
 }
 
 // Del removes values from storage and returns count of actually removed values
 // if key not found in the storage, just skip it
 func (e *StorageHash) Del(keys []string) (count int) {
-	e.mu.Lock()
-	for _, k := range keys {
-		if _, ok := e.data[k]; ok {
-			count++
+	var keysByBucket [bucketsCount][]string
+	for _, key := range keys {
+		b := getBucket(key)
+		keysByBucket[b] = append(keysByBucket[b], key)
+	}
+
+	for b, bucketKeys := range keysByBucket {
+		if len(bucketKeys) == 0 {
+			continue
 		}
 
-		delete(e.data, k)
+		e.mu[b].Lock()
+		for _, key := range bucketKeys {
+			if _, ok := e.data[b][key]; ok {
+				count++
+				delete(e.data[b], key)
+			}
+		}
+		e.mu[b].Unlock()
 	}
-	e.mu.Unlock()
 
 	return count
 }
@@ -83,14 +126,26 @@ func (e *StorageHash) Del(keys []string) (count int) {
 // DelSubmap removes Items only if existing *Item equals to provided submap[key]
 // if key not found in the storage, just skip it and returns count of actually deleted items
 func (e *StorageHash) DelSubmap(submap map[string]*Item) (count int) {
-	e.mu.Lock()
-	for key, item := range submap {
-		if existingItem, ok := e.data[key]; ok && existingItem == item {
-			count++
-			delete(e.data, key)
-		}
+	var keysByBucket [bucketsCount][]string
+	for key := range submap {
+		b := getBucket(key)
+		keysByBucket[b] = append(keysByBucket[b], key)
 	}
-	e.mu.Unlock()
+
+	for b, bucketKeys := range keysByBucket {
+		if len(bucketKeys) == 0 {
+			continue
+		}
+
+		e.mu[b].Lock()
+		for _, key := range bucketKeys {
+			if existingItem, ok := e.data[b][key]; ok && existingItem == submap[key] {
+				count++
+				delete(e.data[b], key)
+			}
+		}
+		e.mu[b].Unlock()
+	}
 
 	return count
 }
@@ -107,17 +162,19 @@ func (e *StorageHash) Persist(w io.Writer, lastMessageId int64) error {
 	}
 
 	exp := &gobExportItem{}
-	for k, v := range e.data {
-		exp.Key = k
-		exp.ExpireAt = v.expireAt
-		exp.Kind = v.kind
-		exp.Bytes = v.bytes
-		exp.List = v.list
-		exp.Dict = v.dict
+	for _, bucketData := range e.data {
+		for k, v := range bucketData {
+			exp.Key = k
+			exp.ExpireAt = v.expireAt
+			exp.Kind = v.kind
+			exp.Bytes = v.bytes
+			exp.List = v.list
+			exp.Dict = v.dict
 
-		if err := encoder.Encode(exp); err != nil {
-			return fmt.Errorf("StorageHash.Persist(): can't encode item: %s", err)
-			return err
+			if err := encoder.Encode(exp); err != nil {
+				return fmt.Errorf("StorageHash.Persist(): can't encode item: %s", err)
+				return err
+			}
 		}
 	}
 
@@ -126,11 +183,15 @@ func (e *StorageHash) Persist(w io.Writer, lastMessageId int64) error {
 
 // Load loads storage storage data from Reader
 func (e *StorageHash) Load(r io.Reader) (lastMessageId int64, err error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	for b := range e.data {
+		e.mu[b].Lock()
+		defer e.mu[b].Unlock()
 
-	if len(e.data) != 0 {
-		return 0, errors.New("StorageHash.Load(): restore enabled only on empty storage")
+		if len(e.data[b]) != 0 {
+			return 0, errors.New("StorageHash.Load(): restore enabled only on empty storage")
+		}
+
+		e.data[b] = make(map[string]*Item)
 	}
 
 	decoder := gob.NewDecoder(r)
@@ -139,19 +200,19 @@ func (e *StorageHash) Load(r io.Reader) (lastMessageId int64, err error) {
 		return 0, fmt.Errorf("StorageHash.Load(): can't decode messageId: %s", err)
 	}
 
-	e.data = make(map[string]*Item)
 	exp := new(gobExportItem)
 	for err := decoder.Decode(exp); err != io.EOF; err = decoder.Decode(exp) {
 		if err != nil {
 			return 0, fmt.Errorf("StorageHash.Load(): can't decode item: %s", err)
 		}
 
-		e.data[exp.Key] = new(Item)
-		e.data[exp.Key].expireAt = exp.ExpireAt
-		e.data[exp.Key].kind = exp.Kind
-		e.data[exp.Key].bytes = exp.Bytes
-		e.data[exp.Key].list = exp.List
-		e.data[exp.Key].dict = exp.Dict
+		bucket := e.data[getBucket(exp.Key)]
+		bucket[exp.Key] = new(Item)
+		bucket[exp.Key].expireAt = exp.ExpireAt
+		bucket[exp.Key].kind = exp.Kind
+		bucket[exp.Key].bytes = exp.Bytes
+		bucket[exp.Key].list = exp.List
+		bucket[exp.Key].dict = exp.Dict
 
 		exp = new(gobExportItem)
 	}
@@ -161,18 +222,24 @@ func (e *StorageHash) Load(r io.Reader) (lastMessageId int64, err error) {
 
 // FullLock locks storage and all items to ensure exclusive access to its content
 func (e *StorageHash) fullLock() {
-	e.mu.Lock()
-
-	for _, v := range e.data {
-		v.Lock()
+	for b := range e.data {
+		e.mu[b].Lock()
+		for _, v := range e.data[b] {
+			v.Lock()
+		}
 	}
 }
 
 // FullUnlock unlocks storage and all items
 func (e *StorageHash) fullUnlock() {
-	for _, v := range e.data {
-		v.Unlock()
+	for b := range e.data {
+		for _, v := range e.data[b] {
+			v.Unlock()
+		}
+		e.mu[b].Unlock()
 	}
+}
 
-	e.mu.Unlock()
+func getBucket(key string) int {
+	return int(xxhash.ChecksumString64(key) % bucketsCount)
 }

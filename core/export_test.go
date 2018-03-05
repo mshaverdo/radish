@@ -1,9 +1,18 @@
 package core
 
 func (e *StorageHash) SetData(data map[string]*Item) {
-	e.data = data
+	for k, v := range data {
+		e.AddOrReplaceOne(k, v)
+	}
 }
 
 func (e *StorageHash) Data() map[string]*Item {
-	return e.data
+	result := make(map[string]*Item)
+	for b := range e.data {
+		for k, v := range e.data[b] {
+			result[k] = v
+		}
+	}
+
+	return result
 }
