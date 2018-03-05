@@ -31,11 +31,6 @@ To build everything just type:
 $ make
 ```
 
-To build and test:
-```
-$ make test
-```
-
 To build and perform all tests with race detection, including integration tests:
 ```
 $ make full-test
@@ -66,7 +61,7 @@ $ ./radish-server -http
 
 ## Benchmark 
 
-Standard `redis-benchmark` tool may be used to benchmarking. Due to limited command set, it's recommended to run in with 
+Standard `redis-benchmark` tool may be used to benchmarking. Due to limited command set, it's recommended to run it with 
 `-t SET,GET,LPUSH,LPOP,HSET,LRANGE_100,LRANGE_300,LRANGE_450,LRANGE_600` parameter. 
 
 Results for `./radish-server -d ""`  on  Amazon t2.2xlarge:
