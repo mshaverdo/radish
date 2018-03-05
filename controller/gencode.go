@@ -1,6 +1,5 @@
 package controller
 
-//TODO: implement tests & benchmarks
 import (
 	"bufio"
 	"encoding/binary"

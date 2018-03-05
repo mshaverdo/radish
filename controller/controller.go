@@ -137,7 +137,7 @@ func New(
 	c := Controller{
 		host:                   host,
 		port:                   port,
-		core:                   core.New(core.NewStorageHash()),
+		core:                   core.New(storageFactory()),
 		stopChan:               make(chan struct{}),
 		collectExpiredInterval: collectInterval,
 		dataDir:                dataDir,
@@ -158,6 +158,7 @@ func New(
 			dataDir,
 			syncPolicy,
 			mergeWalInterval,
+			storageFactory,
 		)
 	}
 
@@ -262,8 +263,11 @@ func (c *Controller) stop() {
 }
 
 func (c *Controller) isRunning() bool {
-	//TODO: change to RWmutex, get rid of defer to improve performance
 	c.isRunningMutex.Lock()
 	defer c.isRunningMutex.Unlock()
 	return c.isRunningFlag
+}
+
+func storageFactory() core.Storage {
+	return core.NewStorageHash()
 }

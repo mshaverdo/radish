@@ -42,23 +42,25 @@ const (
 	walBufferSize = 20 * 1024 * 1024
 )
 
-//TODO: добавить фабрику StorageHash, чтобы решение о том, какой анджин порождать принималось в однйо точке
-//TODO: переименовать в 2 интерфейса  persister & loader
-type persistable interface {
+type Persister interface {
 	// Persist dumps storage  data into provided Writer
 	Persist(w io.Writer, lastMessageId int64) error
+}
 
+type Loader interface {
 	// Restore restores storage  data from Reader
 	Load(r io.Reader) (lastMessageId int64, err error)
 }
 
-var _ persistable = (*core.StorageHash)(nil)
+var _ Persister = (*core.StorageHash)(nil)
+var _ Loader = (*core.StorageHash)(nil)
 
 type Keeper struct {
 	mergeWalInterval time.Duration
 	syncPolicy       SyncPolicy
 	dataDir          string
 	core             Core
+	storageFactory   func() core.Storage
 
 	processor *Processor
 
@@ -75,7 +77,7 @@ type Keeper struct {
 	stopChan  chan struct{}
 }
 
-func NewKeeper(core Core, dataDir string, policy SyncPolicy, mergeWalInterval time.Duration) *Keeper {
+func NewKeeper(core Core, dataDir string, policy SyncPolicy, mergeWalInterval time.Duration, storageFactory func() core.Storage) *Keeper {
 	return &Keeper{
 		core:             core,
 		dataDir:          dataDir,
@@ -84,6 +86,7 @@ func NewKeeper(core Core, dataDir string, policy SyncPolicy, mergeWalInterval ti
 		processor:        NewProcessor(core),
 		stopChan:         make(chan struct{}),
 		requestChan:      make(chan *message.Request, requestChanSize),
+		storageFactory:   storageFactory,
 	}
 }
 
@@ -127,7 +130,6 @@ func (k *Keeper) runWalController() {
 	}
 }
 
-//TODO: test on full disc
 func (k *Keeper) writeToWalWorker(request *message.Request) (err error) {
 	k.mutex.Lock()
 
@@ -152,13 +154,13 @@ func (k *Keeper) flushBuffers(forceFlush bool) (err error) {
 	if forceFlush || k.syncPolicy == SyncAlways {
 		k.walBuffer.Flush()
 		if err != nil {
-			return fmt.Errorf("Keeper.writeToWalWorker(): %s", err)
+			return fmt.Errorf("Keeper.flushBuffers(): %s", err)
 		}
 
 		if k.syncPolicy == SyncAlways || (k.syncPolicy == SyncSometimes && time.Since(k.lastSync) > 1*time.Second) {
 			err = k.walFile.Sync()
 			if err != nil {
-				return fmt.Errorf("Keeper.writeToWalWorker(): %s", err)
+				return fmt.Errorf("Keeper.flushBuffers(): %s", err)
 			}
 			k.lastSync = time.Now()
 		}
@@ -216,8 +218,13 @@ func (k *Keeper) loadStorage() error {
 
 	log.Infof("Loading storage data from %s...", filename)
 
-	storage := core.NewStorageHash()
-	messageId, err := storage.Load(bufio.NewReader(file))
+	storage := k.storageFactory()
+	loadable, ok := storage.(Loader)
+	if !ok {
+		return fmt.Errorf("Keeper.loadStorage(): Failed to load data: Storage not support loading")
+	}
+
+	messageId, err := loadable.Load(bufio.NewReader(file))
 	if err != nil {
 		return fmt.Errorf("Keeper.loadStorage(): %s", err)
 	}
@@ -270,7 +277,7 @@ func (k *Keeper) processWal(filename string) error {
 
 	file, err := os.Open(filename)
 	if err != nil {
-		return err
+		return fmt.Errorf("Keeper.processWal(): can't open file %s: %s", filename, err)
 	}
 	defer file.Close()
 
@@ -320,7 +327,7 @@ func (k *Keeper) persistStorage() error {
 	}
 
 	// ensure exclusive access to storage during encoding
-	persistable, ok := k.core.Storage().(persistable)
+	persistable, ok := k.core.Storage().(Persister)
 	if !ok {
 		return fmt.Errorf("Keeper.persistStorage(): Failed to persist data: Storage not support persistence")
 	}
@@ -477,10 +484,11 @@ func (k *Keeper) updateSnapshot() error {
 	assert.True(len(allWals) != len(processingWals), "new WAL must be in datadir: "+k.dataDir+" "+newWal)
 
 	snapshotKeeper := NewKeeper(
-		core.New(core.NewStorageHash()),
+		core.New(nil),
 		k.dataDir,
 		SyncNever,
 		0,
+		k.storageFactory,
 	)
 
 	if err := snapshotKeeper.loadStorage(); err != nil {
