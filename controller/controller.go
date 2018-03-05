@@ -2,6 +2,7 @@ package controller
 
 import (
 	"errors"
+	"github.com/mshaverdo/radish/api"
 	"github.com/mshaverdo/radish/api/resp"
 	"github.com/mshaverdo/radish/api/restless"
 	"github.com/mshaverdo/radish/core"
@@ -124,6 +125,8 @@ type Controller struct {
 	isRunningFlag  bool
 	stopChan       chan struct{}
 }
+
+var _ api.MessageHandler = (*Controller)(nil)
 
 // New Constructs new instance of Controller
 func New(

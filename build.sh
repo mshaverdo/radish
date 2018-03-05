@@ -96,5 +96,5 @@ fi
 
 # build and store objects into original directory.
 go build -ldflags "$LDFLAGS" -o "$OD/radish-server" cmd/radish-server/*.go
-go build -ldflags "$LDFLAGS" -o "$OD/radish-benchmark" cmd/radish-benchmark/*.go
+go build -ldflags "$LDFLAGS" -o "$OD/radish-benchmark-http" cmd/radish-benchmark-http/*.go
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/mshaverdo/radish/api"
 	"github.com/mshaverdo/radish/log"
 	"github.com/mshaverdo/radish/message"
 	"io"
@@ -23,17 +24,12 @@ const (
 // Server is a implementation of Server interface
 type Server struct {
 	http.Server
-	messageHandler MessageHandler
+	messageHandler api.MessageHandler
 	stopChan       chan struct{}
 }
 
-// MessageHandler processes a Request message and return a response message
-type MessageHandler interface {
-	HandleMessage(request *message.Request) message.Response
-}
-
 // NewServer Returns new instance of Radish HTTP server
-func NewServer(host string, port int, messageHandler MessageHandler) *Server {
+func NewServer(host string, port int, messageHandler api.MessageHandler) *Server {
 	// use server instance instead of http.ListenAndServe -- due to we should use graceful shutdown
 	addr := fmt.Sprintf("%s:%d", host, port)
 

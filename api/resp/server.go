@@ -2,6 +2,7 @@ package resp
 
 import (
 	"fmt"
+	"github.com/mshaverdo/radish/api"
 	"github.com/mshaverdo/radish/log"
 	"github.com/mshaverdo/radish/message"
 	"github.com/tidwall/redcon"
@@ -12,20 +13,12 @@ type Server struct {
 	host           string
 	port           int
 	server         *redcon.Server
-	messageHandler MessageHandler
+	messageHandler api.MessageHandler
 	stopChan       chan struct{}
 }
 
-//TODO: возвращать ошибку на неизвестные команды
-//TODO: этот интерфейс уже определен в rest. решить ,чт ос ним делать.
-//TODO: set expiration! должен корректно обрабатывать команды SET <key> <value> EX <seconds>
-// MessageHandler processes a Request message and return a response message
-type MessageHandler interface {
-	HandleMessage(request *message.Request) message.Response
-}
-
 // NewServer Returns new instance of Server
-func NewServer(host string, port int, messageHandler MessageHandler) *Server {
+func NewServer(host string, port int, messageHandler api.MessageHandler) *Server {
 	s := Server{
 		messageHandler: messageHandler,
 		stopChan:       make(chan struct{}),

@@ -7,6 +7,7 @@ import (
 	"github.com/mshaverdo/radish/radish-client"
 	"math/rand"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -18,11 +19,6 @@ func init() {
 	assert.Enabled = (assertionEnabled == "1")
 }
 
-//TODO: погонять этот бенчмарк в заменой radhsh.Clinet на redis.client
-//TODO: пройтись по всему коду, посмотреть чтобы возвращаемый значения везде были единообразны
-//TODO: перенести http, resp сервера в radish/ApiServer/http, radish/ApiServer/resp
-//TODO: проверить перфоманс с включенным WAL
-//TODO: паралельная работа http & resp серверов
 //TODO: переименовать в radish-http-benchmark
 
 type Test struct {
@@ -118,6 +114,7 @@ func main() {
 	client := radish.NewClient(host, port)
 	wg := new(sync.WaitGroup)
 
+	testNames = strings.ToUpper(testNames)
 	testList := strings.Split(testNames, ",")
 	if len(testList) == 0 {
 		return
@@ -176,6 +173,9 @@ func main() {
 			wg.Add(1)
 			n++
 			go test.Run()
+		} else {
+			fmt.Printf("Invalid test: %q\n", testList[n%len(testList)])
+			os.Exit(2)
 		}
 	}
 
