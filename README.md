@@ -1,11 +1,20 @@
 # Radish
 
-Radish is a 100%-golang in-memory key-value storage for strings (including binary data), lists and dictionaries
-with per-key TTL and disk persistence. 
+Radish is a golang redis-like storage.
+
+**Key features:**
+
+* multithreaded
+* strings, dicts, lists support 
+* per-key TTL
+* HTTP API
+* high-performance RESP protocol, compatible with existing redis clients
+* write-ahead log + storage snapshot persistence 
+
 
 ## Components
-- `radish-server    ` - The server
-- `radish-benchmark-http ` - The server HTTP API benchmarking tool
+- `radish-server` - The server
+- `radish-benchmark-http ` - HTTP API benchmarking tool
 
 ## Getting Started
 
@@ -27,13 +36,18 @@ To build and test:
 $ make test
 ```
 
+To build and perform all tests with race detection, including integration tests:
+```
+$ make full-test
+```
+
 ## Running 
 To get server built-in cli hint:
 ```
 $ ./radish-server --help
 ```
 
-Run server on port 6380, with persistence into current dir, 
+Run server on port 6380 with RESP protocol, with persistence into current dir, 
 taking a storage snapshot every 10 minutes and sync write-ahead log to disk once a second:
 ```
 $ ./radish-server -h localhost -p 6380 -d ./ -m 600 -s 1
@@ -45,32 +59,57 @@ or just
 $ ./radish-server
 ```
 
+to run Radish with HTTP API, add `-http` option:
+```
+$ ./radish-server -http
+```
+
 ## Benchmark 
 
-To get server built-in cli hint:
+Standard `redis-benchmark` tool may be used to benchmarking. Due to limited command set, it's recommended to run in with 
+`-t SET,GET,LPUSH,LPOP,HSET,LRANGE_100,LRANGE_300,LRANGE_450,LRANGE_600` parameter. 
+
+Results for `./radish-server -d ""`  on  Amazon t2.2xlarge:
 
 ```
-$ ./radish-benchmark-http --help
+ubuntu@ip-172-31-41-114:~$ redis-benchmark  -p 6380 -e -q   -P 512 -n 10000000 -r 1000000 -t SET,GET,LPUSH,LPOP,HSET,LRANGE_100
+SET: 2180074.25 requests per second
+GET: 2227171.50 requests per second
+LPUSH: 688800.12 requests per second
+LPOP: 810044.56 requests per second
+HSET: 1362583.38 requests per second
+LPUSH (needed to benchmark LRANGE): 671591.69 requests per second
+LRANGE_100 (first 100 elements): 114689.42 requests per second
 ```
 
-Run standard HTTP API benchmark for localhost server with 20 threads, 100k requests, SET, GET, LPUSH, LPOP operations:
+`radish-benchmark-http` allows to benchmark HTTP API.
 
-```
-$ ./radish-benchmark-http
-```
+Results for `./radish-server -d "" -http`  on  Amazon t2.2xlarge:
 
 
+```
+ubuntu@ip-172-31-41-114:~$ ./radish-benchmark-http 
+SET: 25000/25000 success
+GET: 25000/25000 success
+LPUSH: 25000/25000 success
+LPOP: 25000/25000 success
+Total: 100000/100000, 1.598863625s, 62544 requests per second
+```
 
-Running only GET & SET tests, 1M requests, with 1M keyspace len on Amazon t2.2xlarge instance:
-```
-$ ./radish_benchmark-http -n 1000000 -r 1000000 -t GET,SET
-GET: 500000/500000 success
-SET: 500000/500000 success
-Total: 1000000/1000000, 14.835083023s, 67408 requests per second
-```
 
 ## API
-### Go client
+### RESP
+First of all, Radish provides redis-compatible RESP API with pipeline support and limited command set 
+via https://github.com/tidwall/resp library. 
+RESP is a default mode and allows to get a maximum performance from Radish. 
+It compatible with existing Redis clients with few limitations:
+
+* limited command set. Full list of available commands see in **HTTP** section
+* SET is only standard: SET <key> <value>. For set-and-expire, please, use SETEX
+* TTL doesn't support milliseconds
+
+
+### HTTP-API Go client
 Radish server is shipped with with the go client library, `github.com/mshaverdo/radish-client`
 
 **Key features:**
@@ -83,7 +122,7 @@ Radish server is shipped with with the go client library, `github.com/mshaverdo/
 please find more examples in `github.com/mshaverdo/radish-client/example`
 
 ### HTTP
-Radish has simple HTTP network API. Generally, a command looks like `/<CMD>/<KEY>/<PARAM>`. 
+Radish has RESTless HTTP network API. Generally, a command looks like `/<CMD>/<KEY>/<PARAM>`. 
 For example, `/HGET/<KEY>/<FIELD>` returns the value in the field \<FIELD\> of dict in \<KEY\>.
 `Content-Type: multipart/form-data` is utilized for requests or responses with multiple data items in one request (`LPUSH`, `KEYS`, `LRANGE`, etc).
 
@@ -211,11 +250,11 @@ Strings:
 *  `/DEL/<KEY>[/<KEY>...]` - Del Removes the specified keys, ignoring not existing and returns count of actually removed values.
 
 Dicts:
-*  `/DKEYS/<KEY>` - Returns all field names in the dict stored at key. Returns multipart/form-data result.
-*  `/DGETALL/<KEY>`- DGetAll Returns all fields and values of the hash stored at key. Returns multipart/form-data result.
-*  `/DGET/<KEY>/<FIELD>` - DGet Returns the value associated with field in the dict stored at key.
-*  `/DSET/<KEY>/<FIELD>` - DSet Sets field in the hash stored at key to value.  Payload content in POST body.
-*  `/DDEL/<KEY>/<FIELD>[/<FIELD>...]` - DDel Removes the specified fields from the hash stored at key.
+*  `/HKEYS/<KEY>` - Returns all field names in the dict stored at key. Returns multipart/form-data result.
+*  `/HGETALL/<KEY>`- DGetAll Returns all fields and values of the hash stored at key. Returns multipart/form-data result.
+*  `/HGET/<KEY>/<FIELD>` - DGet Returns the value associated with field in the dict stored at key.
+*  `/HSET/<KEY>/<FIELD>` - DSet Sets field in the hash stored at key to value.  Payload content in POST body.
+*  `/HDEL/<KEY>/<FIELD>[/<FIELD>...]` - DDel Removes the specified fields from the hash stored at key.
 
 Lists:
 *  `/LLEN/<KEY>` - LLen Returns the length of the list stored at key.

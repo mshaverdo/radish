@@ -13,13 +13,11 @@ import (
 	"time"
 )
 
-var assertionEnabled = "1"
+var debug = "1"
 
 func init() {
-	assert.Enabled = (assertionEnabled == "1")
+	assert.Enabled = (debug == "1")
 }
-
-//TODO: переименовать в radish-http-benchmark
 
 type Test struct {
 	fnc                                  func(*Test) (bool, error)

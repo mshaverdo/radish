@@ -12,20 +12,12 @@ import (
 	"time"
 )
 
-var assertionEnabled = "1"
+var debug = "1"
 
 func init() {
-	assert.Enabled = (assertionEnabled == "1")
+	assert.Enabled = (debug == "1")
 }
 
-//TODO: добавить описание опции -http в README. Написать, что основной режим -- RESP, дополнительный HTTP
-//TODO: в build.sh добавить пункт full-test c tag integration !!! и с флагом -race для полного тестирования
-//TODO: перейти на go 1.10
-//TODO: REST в HTTP API
-//TODO: написать в readme, что не поддерживается команда SET key val EX ttl, вместо нее надо использоавть SETEX -- поэтому в go-redis SET с указанием TTL работать не будет
-//TODO: написать вижн по реализации шардинга
-//TODO: написать в README, как запускать redis-benchmark. И что запускать его надо с Pipeline режимом
-//TODO: добавить в readme, что, очеыидно, для лучшей производительности можно запускать с GOGC=500. !!! привести примеры бенчмарка на GC=500
 func main() {
 	var (
 		host, dataDir               string
@@ -39,7 +31,9 @@ func main() {
 	)
 
 	flag.StringVar(&host, "h", "", "The listening host.")
-	flag.StringVar(&cpuProfile, "cpuprofile", "", "dump cpu profile into specified file")
+	if debug == "1" {
+		flag.StringVar(&cpuProfile, "cpuprofile", "", "dump cpu profile into specified file")
+	}
 	flag.IntVar(&port, "p", 6380, "The listening port.")
 	flag.IntVar(&collectInterval, "e", 100, "Expired items collection interval in seconds")
 	flag.IntVar(&mergeWalInterval, "m", 600, "Merge WAL into snapshot interval in seconds")
@@ -51,7 +45,6 @@ func main() {
 	flag.BoolVar(&useHttp, "http", false, "Use HTTP API")
 	flag.Parse()
 
-	//TODO: disable in production
 	if cpuProfile != "" {
 		if fCpu, err := os.Create(cpuProfile); err == nil {
 			pprof.StartCPUProfile(fCpu)

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-LDFLAGS="$LDFLAGS -X main.assertionEnabled=0"
+LDFLAGS="-X main.debug=0 $LDFLAGS"
 
 # Check go install
 if [ "$(which go)" == "" ]; then
@@ -9,6 +9,7 @@ if [ "$(which go)" == "" ]; then
 	exit 1
 fi
 
+# Check dep install
 if [ "$(which dep)" == "" ]; then
 	echo "error: dep Go dependency manager is not installed. Please download and follow installation instructions at https://github.com/golang/dep to continue."
 	exit 1
@@ -90,9 +91,12 @@ dep ensure
 
 # test if requested
 if [ "$1" == "test" ]; then
-		go test github.com/mshaverdo/radish/core github.com/mshaverdo/radish/controller/httpserver github.com/mshaverdo/radish/radish-client
+		go test -short ./... | grep -Pv "^\?"
 fi
 
+if [ "$1" == "full-test" ]; then
+		GOCACHE=off go test -race -tags integration ./... | grep -Pv "^\?"
+fi
 
 # build and store objects into original directory.
 go build -ldflags "$LDFLAGS" -o "$OD/radish-server" cmd/radish-server/*.go

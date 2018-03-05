@@ -76,7 +76,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		response message.Response
 	)
 
-	log.Debugf("Received request: %q", r.URL.EscapedPath())
+	//log.Debugf("Received request: %q", r.URL.EscapedPath())
 
 	request, err := parseRequest(r)
 	if err != nil {
@@ -85,11 +85,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Debugf("Handling request: %s", request)
+	//log.Debugf("Handling request: %s", request)
 
 	response = s.messageHandler.HandleMessage(request)
 
-	log.Debugf("Sending response: %s", response)
+	//log.Debugf("Sending response: %s", response)
 
 	sendResponse(response, w)
 }

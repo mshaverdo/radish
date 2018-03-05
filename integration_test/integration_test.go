@@ -161,7 +161,6 @@ func TestMain(m *testing.M) {
 		radishRespPort int
 	)
 
-	//TODO: добавить описания ключей и способ запуска интеграционного теста в README
 	//go test -tags integration -v -redis localhost:6379 -flush github.com/mshaverdo/radish/integration_test
 	flag.IntVar(&radishHttpPort, "resp", 16381, "Free port for testing RESP radish server")
 	flag.IntVar(&radishRespPort, "http", 16380, "Free port for testing HTTP radish server")
