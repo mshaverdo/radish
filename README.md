@@ -99,8 +99,9 @@ via https://github.com/tidwall/resp library.
 RESP is a default mode and allows to get a maximum performance from Radish. 
 It compatible with existing Redis clients with few limitations:
 
-* limited command set. Full list of available commands see in **HTTP** section
-* SET is only standard: SET <key> <value>. For set-and-expire, please, use SETEX
+* limited command set: `KEYS`, `GET`, `SET`, `SETEX`, `DEL`, `HKEYS`, `HGETALL`, `HGET`, `HSET`, `HDEL`, `LLEN`, 
+`LRANGE`, `LINDEX`, `LSET`, `LPUSH`, `LPOP`, `TTL`, `EXPIRE`, `PERSIST`
+* `SET` is only standard: `SET <key> <value>`. For set-and-expire, please, use `SETEX`
 * TTL doesn't support milliseconds
 
 
